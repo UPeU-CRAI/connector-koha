@@ -59,9 +59,9 @@ public class RestUsersConnector
 	implements CreateOp, UpdateOp, SchemaOp, SearchOp<RestUsersFilter>, DeleteOp, UpdateAttributeValuesOp, TestOp, TestApiOp
 {
 	private static final Log LOG = Log.getLog(RestUsersConnector.class);
-	
-	private static final String USERS_ENDPOINT = "/users";
-	private static final String ROLES_ENDPOINT = "/roles";
+
+	private static final String PATRONS_ENDPOINT = "/api/v1/patrons";
+	private static final String ROLES_ENDPOINT = "/api/v1/patron_categories";
 
 	public static final String ATTR_FIRST_NAME = "firstName";
 	public static final String ATTR_LAST_NAME = "lastName";
@@ -228,8 +228,8 @@ public class RestUsersConnector
 					{
 						JSONObject json = new JSONObject();
 						json.put("id", role.toString());
-						
-						String endpoint = String.format("%s/%s/%s/%s", getConfiguration().getServiceAddress(), USERS_ENDPOINT, uid.getUidValue(), ROLES_ENDPOINT);
+
+						String endpoint = String.format("%s%s/%s/%s", getConfiguration().getServiceAddress(), PATRONS_ENDPOINT, uid.getUidValue(), ROLES_ENDPOINT);
 						LOG.info("Adding role {0} for user {1} on endpoint {2}", role.toString(), uid.getUidValue(), endpoint);
 						HttpEntityEnclosingRequestBase request = new HttpPost(endpoint);
 						callRequest(request, json);
@@ -258,7 +258,7 @@ public class RestUsersConnector
 					List<Object> revokedRoles = attribute.getValue();
 					for(Object role:revokedRoles)
 					{
-						String endpoint = String.format("%s/%s/%s/%s/%s", getConfiguration().getServiceAddress(), USERS_ENDPOINT, uid.getUidValue(), ROLES_ENDPOINT, role.toString());
+						String endpoint = String.format("%s/%s/%s/%s/%s", getConfiguration().getServiceAddress(), PATRONS_ENDPOINT, uid.getUidValue(), ROLES_ENDPOINT, role.toString());
 						LOG.info("Revoking role {0} for user {1} on endpoint {2}", role.toString(), uid.getUidValue(), endpoint);
 						HttpDelete request = new HttpDelete(endpoint);
 						callRequest(request);
@@ -538,17 +538,21 @@ public class RestUsersConnector
         }
         return false;
     }
-	
-	private ConnectorObject convertRoleToConnectorObject(JSONObject role) throws IOException
-	{
-		ConnectorObjectBuilder builder = new ConnectorObjectBuilder();
-		builder.setUid(new Uid(role.get("id").toString()));
-		builder.setName(role.getString("name"));
+
+	private ConnectorObject convertRoleToConnectorObject(JSONObject role) throws IOException {
+		ConnectorObjectBuilder builder = new ConnectorObjectBuilder(); // 💥 ESTA LÍNEA FALTABA
+
+		builder.setUid(new Uid(role.getString("categorycode")));
+		builder.setName(role.getString("description"));
+
+		addIfPresent(builder, "enrolmentperiod", role);
+		addIfPresent(builder, "datecreated", role);
 
 		ConnectorObject connectorObject = builder.build();
 		LOG.ok("convertRoleToConnectorObject, user: {0}, \n\tconnectorObject: {1}", role.get("id").toString(), connectorObject);
 		return connectorObject;
 	}
+
 
 	@Override
 	public void delete(ObjectClass objectClass, Uid uid, OperationOptions options) {
@@ -575,7 +579,7 @@ public class RestUsersConnector
 		LOG.info("Entering test");
 		try
 		{
-			HttpGet request = new HttpGet(getConfiguration().getServiceAddress() + USERS_ENDPOINT);
+			HttpGet request = new HttpGet(getConfiguration().getServiceAddress() + PATRONS_ENDPOINT);
 			callRequest(request);
 			LOG.info("Test OK");
 		}
