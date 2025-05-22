@@ -47,6 +47,8 @@ import org.identityconnectors.framework.spi.operations.UpdateAttributeValuesOp;
 import org.identityconnectors.framework.spi.operations.UpdateOp;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.identityconnectors.framework.common.objects.Name;
+
 
 import com.evolveum.polygon.rest.AbstractRestConnector;
 
@@ -67,124 +69,146 @@ public class RestUsersConnector
 	public static final String ATTR_USERNAME = "username";
 	public static final String ATTR_ROLES = "roles";
 
-	public Schema schema()
-	{
+	@Override
+	public Schema schema() {
 		LOG.ok("Reading schema");
 		SchemaBuilder schemaBuilder = new SchemaBuilder(RestUsersConnector.class);
 		ObjectClassInfoBuilder accountBuilder = new ObjectClassInfoBuilder();
 		accountBuilder.setType(ObjectClass.ACCOUNT_NAME);
 
-		AttributeInfoBuilder attrUsername = new AttributeInfoBuilder(ATTR_USERNAME);
-		attrUsername.setRequired(true);
-		accountBuilder.addAttributeInfo(attrUsername.build());
+		// Identificadores obligatorios
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("userid").setRequired(true).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("cardnumber").setRequired(true).build());
 
-		AttributeInfoBuilder attrEmail = new AttributeInfoBuilder(ATTR_EMAIL);
-		attrEmail.setRequired(false);
-		accountBuilder.addAttributeInfo(attrEmail.build());
+		// Datos personales
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("firstname").setRequired(true).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("surname").setRequired(true).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("othernames").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("sex").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("dateofbirth").build());
 
-		AttributeInfoBuilder attrFirstName = new AttributeInfoBuilder(ATTR_FIRST_NAME);
-		attrFirstName.setRequired(true);
-		accountBuilder.addAttributeInfo(attrFirstName.build());
+		// Contacto
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("email").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("emailpro").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("phone").build());
 
-		AttributeInfoBuilder attrLastName = new AttributeInfoBuilder(ATTR_LAST_NAME);
-		attrLastName.setRequired(true);
-		accountBuilder.addAttributeInfo(attrLastName.build());
-		
-		AttributeInfoBuilder attrDummy = new AttributeInfoBuilder("dummy");
-		attrDummy.setRequired(false);
-		accountBuilder.addAttributeInfo(attrDummy.build());
-		
-		AttributeInfoBuilder attrRoles = new AttributeInfoBuilder(ATTR_ROLES);
-		attrRoles.setMultiValued(true);
-		attrRoles.setRequired(false);
-		accountBuilder.addAttributeInfo(attrRoles.build());
+		// Dirección
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("address").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("city").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("state").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("zipcode").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("country").build());
+
+		// Clasificación académica
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("sort1").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("sort2").build());
+
+		// Expiración y categoría
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("dateexpiry").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("categorycode").setRequired(true).build());
+
+// UID y nombre (necesario para ConnId)
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(Name.NAME).setRequired(true).build());
 
 		schemaBuilder.defineObjectClass(accountBuilder.build());
-		
+
+		// Objeto tipo grupo (opcional, depende de si Koha los usa)
 		ObjectClassInfoBuilder groupBuilder = new ObjectClassInfoBuilder();
 		groupBuilder.setType(ObjectClass.GROUP_NAME);
-		
 		schemaBuilder.defineObjectClass(groupBuilder.build());
-
 
 		LOG.ok("Exiting schema");
 		return schemaBuilder.build();
 	}
 
-	public Uid create(ObjectClass objectClass, Set<Attribute> attributes, OperationOptions operationOptions)
-	{
+	@Override
+	public Uid create(ObjectClass objectClass, Set<Attribute> attributes, OperationOptions operationOptions) {
 		LOG.ok("Entering create with objectClass: {0}", objectClass.toString());
-		JSONObject response = null;
+		JSONObject response;
 		JSONObject jo = new JSONObject();
-		
-		for(Attribute attr:attributes)
-		{
-			LOG.ok("Reading attribute {0} with value {1}", attr.getName(), attr.getValue());
-			jo.put(attr.getName(), getStringAttr( attributes, attr.getName()) );
-		}
-		
-		String endpoint = getConfiguration().getServiceAddress();
-		if(ObjectClass.ACCOUNT.is( objectClass.getObjectClassValue()))
-		{
-			endpoint = endpoint.concat(USERS_ENDPOINT);
-		}
-		else if(ObjectClass.GROUP.is( objectClass.getObjectClassValue()))
-		{
-			endpoint = endpoint.concat(ROLES_ENDPOINT);
-		}
-		else
-		{
-			throw new ConnectorException("Unknown object class "+objectClass);
-		}
-		
-		HttpEntityEnclosingRequestBase request = new HttpPost(endpoint);
-		response = callRequest(request, jo);
-		
-		String newUid = response.get("id").toString();
-		LOG.info("response UID: {0}", newUid);
-		return new Uid(newUid);
-	}
-	
-	public Uid update(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions)
-	{
-		LOG.ok("Entering update with objectClass: {0}", objectClass.toString());
-		JSONObject response = null;
-		
-		JSONObject jo = new JSONObject();
-		
-		// midPoint --> Json
-		for(Attribute attribute : attributes)
-		{
-			LOG.info("Update - Atributo recibido {0}: {1}", attribute.getName(), attribute.getValue());
-			jo.put(attribute.getName(), getStringAttr(attributes,attribute.getName()));
-		}
-		LOG.info("Delta a enviar por Rest: {0}", jo.toString());
-		String endpoint = getConfiguration().getServiceAddress();
-		if(ObjectClass.ACCOUNT.is( objectClass.getObjectClassValue()))
-		{
-			endpoint = endpoint.concat(USERS_ENDPOINT) + "/" + uid.getUidValue();
-		}
-		else if(ObjectClass.GROUP.is( objectClass.getObjectClassValue()))
-		{
-			endpoint = endpoint.concat(ROLES_ENDPOINT)+ "/" + uid.getUidValue();
-		}
-		else
-		{
-			throw new ConnectorException("Unknown object class "+objectClass);
-		}
-		try
-		{
-			HttpEntityEnclosingRequestBase request = new HttpPatch(endpoint);
-			response = callRequest(request, jo);
-		}
-		catch (Exception io)
-		{
-			throw new RuntimeException("Error modificando usuario por rest", io);
+
+		if (!ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
+			throw new ConnectorException("Unsupported object class: " + objectClass.getObjectClassValue());
 		}
 
-		String newUid = response.get("id").toString();
-		LOG.info("response UID: {0}", newUid);
+		// Construir el JSON que espera Koha
+		jo.put("userid", getStringAttr(attributes, "userid"));
+		jo.put("surname", getStringAttr(attributes, "surname"));
+		jo.put("firstname", getStringAttr(attributes, "firstname"));
+		jo.put("email", getStringAttr(attributes, "email"));
+		jo.put("emailpro", getStringAttr(attributes, "emailpro"));
+		jo.put("cardnumber", getStringAttr(attributes, "cardnumber"));
+		jo.put("categorycode", getStringAttr(attributes, "categorycode"));
+		jo.put("dateexpiry", getStringAttr(attributes, "dateexpiry"));
+		jo.put("phone", getStringAttr(attributes, "phone"));
+		jo.put("sex", getStringAttr(attributes, "sex"));
+		jo.put("othernames", getStringAttr(attributes, "othernames"));
+		jo.put("address", getStringAttr(attributes, "address"));
+		jo.put("city", getStringAttr(attributes, "city"));
+		jo.put("state", getStringAttr(attributes, "state"));
+		jo.put("zipcode", getStringAttr(attributes, "zipcode"));
+		jo.put("country", getStringAttr(attributes, "country"));
+		jo.put("sort1", getStringAttr(attributes, "sort1"));
+		jo.put("sort2", getStringAttr(attributes, "sort2"));
+		jo.put("dateofbirth", getStringAttr(attributes, "dateofbirth"));
+
+		LOG.info("JSON to send to Koha: {0}", jo.toString());
+
+		// Construir endpoint
+		String endpoint = getConfiguration().getServiceAddress() + "/api/v1/patrons";
+		HttpEntityEnclosingRequestBase request = new HttpPost(endpoint);
+		response = callRequest(request, jo);
+
+		// Koha devuelve el patron ID como respuesta
+		String newUid = response.has("patron_id") ? response.get("patron_id").toString() :
+				response.has("cardnumber") ? response.get("cardnumber").toString() :
+						response.has("userid") ? response.get("userid").toString() :
+								null;
+
+		if (newUid == null) {
+			throw new ConnectorException("Unable to extract UID from Koha response: " + response.toString());
+		}
+
+		LOG.info("Created Koha patron, UID: {0}", newUid);
 		return new Uid(newUid);
+	}
+
+	@Override
+	public Uid update(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions) {
+		LOG.ok("Entering update with objectClass: {0}", objectClass.toString());
+
+		if (!ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
+			throw new ConnectorException("Unsupported object class: " + objectClass.getObjectClassValue());
+		}
+
+		JSONObject jo = new JSONObject();
+
+		for (Attribute attribute : attributes) {
+			LOG.info("Update - Atributo recibido {0}: {1}", attribute.getName(), attribute.getValue());
+			jo.put(attribute.getName(), getStringAttr(attributes, attribute.getName()));
+		}
+
+		LOG.info("JSON delta to send to Koha: {0}", jo.toString());
+
+		// Construir endpoint de actualización
+		String endpoint = getConfiguration().getServiceAddress() + "/api/v1/patrons/" + uid.getUidValue();
+
+		try {
+			HttpEntityEnclosingRequestBase request = new HttpPatch(endpoint);
+			JSONObject response = callRequest(request, jo);
+
+			// Obtener nuevo UID si Koha lo devuelve
+			String newUid = response.has("patron_id") ? response.get("patron_id").toString() :
+					response.has("cardnumber") ? response.get("cardnumber").toString() :
+							response.has("userid") ? response.get("userid").toString() :
+									uid.getUidValue(); // fallback si no devuelve nada
+
+			LOG.info("Updated Koha patron, UID: {0}", newUid);
+			return new Uid(newUid);
+
+		} catch (Exception e) {
+			throw new RuntimeException("Error actualizando usuario en Koha", e);
+		}
 	}
 	
 	@Override
@@ -488,18 +512,22 @@ public class RestUsersConnector
 	}
 
 	@Override
-	public void delete(ObjectClass objectClass, Uid uid, OperationOptions options)
-	{
-		try
-		{
-			HttpDelete deleteReq = new HttpDelete(getConfiguration().getServiceAddress() + USERS_ENDPOINT + "/" + uid.getUidValue());
+	public void delete(ObjectClass objectClass, Uid uid, OperationOptions options) {
+		LOG.ok("Entering delete with objectClass: {0}, uid: {1}", objectClass.getObjectClassValue(), uid.getUidValue());
+
+		if (!ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
+			throw new ConnectorException("Unsupported object class for deletion: " + objectClass.getObjectClassValue());
+		}
+
+		try {
+			String endpoint = getConfiguration().getServiceAddress() + "/api/v1/patrons/" + uid.getUidValue();
+			HttpDelete deleteReq = new HttpDelete(endpoint);
 			callRequest(deleteReq);
+			LOG.info("Deleted Koha patron with UID: {0}", uid.getUidValue());
+		} catch (Exception ex) {
+			LOG.error("Error deleting user in Koha", ex);
+			throw new ConnectorException("Error deleting user in Koha: " + ex.getMessage(), ex);
 		}
-		catch (Exception io)
-		{
-			throw new RuntimeException("Error modificando usuario por rest", io);
-		}
-		
 	}
 
 	@Override
