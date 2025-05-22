@@ -63,11 +63,29 @@ public class RestUsersConnector
 	private static final String PATRONS_ENDPOINT = "/api/v1/patrons";
 	private static final String ROLES_ENDPOINT = "/api/v1/patron_categories";
 
-	public static final String ATTR_FIRST_NAME = "firstName";
-	public static final String ATTR_LAST_NAME = "lastName";
+	// Atributos estándar de usuario (según Koha)
+	public static final String ATTR_USERNAME = "userid";
+	public static final String ATTR_FIRSTNAME = "firstname";
+	public static final String ATTR_SURNAME = "surname";
+	public static final String ATTR_OTHERNAMES = "othernames";
 	public static final String ATTR_EMAIL = "email";
-	public static final String ATTR_USERNAME = "username";
+	public static final String ATTR_EMAILPRO = "emailpro";
+	public static final String ATTR_PHONE = "phone";
+	public static final String ATTR_USERID = "userid";
+	public static final String ATTR_CARDNUMBER = "cardnumber";
+	public static final String ATTR_CATEGORYCODE = "categorycode";
+	public static final String ATTR_DATEEXPIRY = "dateexpiry";
+	public static final String ATTR_SEX = "sex";
+	public static final String ATTR_DATEOFBIRTH = "dateofbirth";
+	public static final String ATTR_SORT1 = "sort1";
+	public static final String ATTR_SORT2 = "sort2";
+	public static final String ATTR_ADDRESS = "address";
+	public static final String ATTR_CITY = "city";
+	public static final String ATTR_STATE = "state";
+	public static final String ATTR_ZIPCODE = "zipcode";
+	public static final String ATTR_COUNTRY = "country";
 	public static final String ATTR_ROLES = "roles";
+
 
 	@Override
 	public Schema schema() {
@@ -131,31 +149,31 @@ public class RestUsersConnector
 			throw new ConnectorException("Unsupported object class: " + objectClass.getObjectClassValue());
 		}
 
-		// Construir el JSON que espera Koha
-		jo.put("userid", getStringAttr(attributes, "userid"));
-		jo.put("surname", getStringAttr(attributes, "surname"));
-		jo.put("firstname", getStringAttr(attributes, "firstname"));
-		jo.put("email", getStringAttr(attributes, "email"));
-		jo.put("emailpro", getStringAttr(attributes, "emailpro"));
-		jo.put("cardnumber", getStringAttr(attributes, "cardnumber"));
-		jo.put("categorycode", getStringAttr(attributes, "categorycode"));
-		jo.put("dateexpiry", getStringAttr(attributes, "dateexpiry"));
-		jo.put("phone", getStringAttr(attributes, "phone"));
-		jo.put("sex", getStringAttr(attributes, "sex"));
-		jo.put("othernames", getStringAttr(attributes, "othernames"));
-		jo.put("address", getStringAttr(attributes, "address"));
-		jo.put("city", getStringAttr(attributes, "city"));
-		jo.put("state", getStringAttr(attributes, "state"));
-		jo.put("zipcode", getStringAttr(attributes, "zipcode"));
-		jo.put("country", getStringAttr(attributes, "country"));
-		jo.put("sort1", getStringAttr(attributes, "sort1"));
-		jo.put("sort2", getStringAttr(attributes, "sort2"));
-		jo.put("dateofbirth", getStringAttr(attributes, "dateofbirth"));
+		// Construir el JSON que espera Koha usando constantes
+		jo.put(ATTR_USERID, getStringAttr(attributes, ATTR_USERID));
+		jo.put(ATTR_SURNAME, getStringAttr(attributes, ATTR_SURNAME));
+		jo.put(ATTR_FIRSTNAME, getStringAttr(attributes, ATTR_FIRSTNAME));
+		jo.put(ATTR_EMAIL, getStringAttr(attributes, ATTR_EMAIL));
+		jo.put(ATTR_EMAILPRO, getStringAttr(attributes, ATTR_EMAILPRO));
+		jo.put(ATTR_CARDNUMBER, getStringAttr(attributes, ATTR_CARDNUMBER));
+		jo.put(ATTR_CATEGORYCODE, getStringAttr(attributes, ATTR_CATEGORYCODE));
+		jo.put(ATTR_DATEEXPIRY, getStringAttr(attributes, ATTR_DATEEXPIRY));
+		jo.put(ATTR_PHONE, getStringAttr(attributes, ATTR_PHONE));
+		jo.put(ATTR_SEX, getStringAttr(attributes, ATTR_SEX));
+		jo.put(ATTR_OTHERNAMES, getStringAttr(attributes, ATTR_OTHERNAMES));
+		jo.put(ATTR_ADDRESS, getStringAttr(attributes, ATTR_ADDRESS));
+		jo.put(ATTR_CITY, getStringAttr(attributes, ATTR_CITY));
+		jo.put(ATTR_STATE, getStringAttr(attributes, ATTR_STATE));
+		jo.put(ATTR_ZIPCODE, getStringAttr(attributes, ATTR_ZIPCODE));
+		jo.put(ATTR_COUNTRY, getStringAttr(attributes, ATTR_COUNTRY));
+		jo.put(ATTR_SORT1, getStringAttr(attributes, ATTR_SORT1));
+		jo.put(ATTR_SORT2, getStringAttr(attributes, ATTR_SORT2));
+		jo.put(ATTR_DATEOFBIRTH, getStringAttr(attributes, ATTR_DATEOFBIRTH));
 
 		LOG.info("JSON to send to Koha: {0}", jo.toString());
 
 		// Construir endpoint
-		String endpoint = getConfiguration().getServiceAddress() + "/api/v1/patrons";
+		String endpoint = getConfiguration().getServiceAddress() + PATRONS_ENDPOINT;
 		HttpEntityEnclosingRequestBase request = new HttpPost(endpoint);
 		response = callRequest(request, jo);
 
@@ -183,25 +201,36 @@ public class RestUsersConnector
 
 		JSONObject jo = new JSONObject();
 
+		// Lista blanca de atributos permitidos
+		Set<String> allowedAttrs = Set.of(
+				ATTR_USERID, ATTR_SURNAME, ATTR_FIRSTNAME, ATTR_EMAIL, ATTR_EMAILPRO,
+				ATTR_CARDNUMBER, ATTR_CATEGORYCODE, ATTR_DATEEXPIRY, ATTR_PHONE,
+				ATTR_SEX, ATTR_OTHERNAMES, ATTR_ADDRESS, ATTR_CITY, ATTR_STATE,
+				ATTR_ZIPCODE, ATTR_COUNTRY, ATTR_SORT1, ATTR_SORT2, ATTR_DATEOFBIRTH
+		);
+
 		for (Attribute attribute : attributes) {
-			LOG.info("Update - Atributo recibido {0}: {1}", attribute.getName(), attribute.getValue());
-			jo.put(attribute.getName(), getStringAttr(attributes, attribute.getName()));
+			String attrName = attribute.getName();
+			if (allowedAttrs.contains(attrName)) {
+				LOG.info("Update - Atributo recibido {0}: {1}", attrName, attribute.getValue());
+				jo.put(attrName, getStringAttr(attributes, attrName));
+			} else {
+				LOG.warn("Atributo no permitido ignorado: {0}", attrName);
+			}
 		}
 
 		LOG.info("JSON delta to send to Koha: {0}", jo.toString());
 
-		// Construir endpoint de actualización
-		String endpoint = getConfiguration().getServiceAddress() + "/api/v1/patrons/" + uid.getUidValue();
+		String endpoint = getConfiguration().getServiceAddress() + PATRONS_ENDPOINT + "/" + uid.getUidValue();
 
 		try {
 			HttpEntityEnclosingRequestBase request = new HttpPatch(endpoint);
 			JSONObject response = callRequest(request, jo);
 
-			// Obtener nuevo UID si Koha lo devuelve
 			String newUid = response.has("patron_id") ? response.get("patron_id").toString() :
 					response.has("cardnumber") ? response.get("cardnumber").toString() :
 							response.has("userid") ? response.get("userid").toString() :
-									uid.getUidValue(); // fallback si no devuelve nada
+									uid.getUidValue();
 
 			LOG.info("Updated Koha patron, UID: {0}", newUid);
 			return new Uid(newUid);
@@ -210,68 +239,55 @@ public class RestUsersConnector
 			throw new RuntimeException("Error actualizando usuario en Koha", e);
 		}
 	}
-	
+
+
 	@Override
-	public Uid addAttributeValues(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions)
-	{
+	public Uid addAttributeValues(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions) {
 		LOG.ok("Entering addValue with objectClass: {0}", objectClass.toString());
-		try
-		{
-			for(Attribute attribute : attributes)
-			{
+		try {
+			for (Attribute attribute : attributes) {
 				LOG.info("AddAttributeValue - Atributo recibido {0}: {1}", attribute.getName(), attribute.getValue());
-				if( attribute.getName().equals("roles"))
-				{		
+				if (RestUsersConnector.ATTR_ROLES.equals(attribute.getName())) {
 					List<Object> addedRoles = attribute.getValue();
-					
-					for(Object role:addedRoles)
-					{
+					for (Object role : addedRoles) {
 						JSONObject json = new JSONObject();
 						json.put("id", role.toString());
 
 						String endpoint = String.format("%s%s/%s/%s", getConfiguration().getServiceAddress(), PATRONS_ENDPOINT, uid.getUidValue(), ROLES_ENDPOINT);
-						LOG.info("Adding role {0} for user {1} on endpoint {2}", role.toString(), uid.getUidValue(), endpoint);
+						LOG.info("Adding role {0} for user {1} on endpoint {2}", role, uid.getUidValue(), endpoint);
 						HttpEntityEnclosingRequestBase request = new HttpPost(endpoint);
 						callRequest(request, json);
 					}
 				}
 			}
-		}
-		catch (Exception io)
-		{
+		} catch (Exception io) {
 			throw new RuntimeException("Error modificando usuario por rest", io);
 		}
 		return uid;
 	}
 
 	@Override
-	public Uid removeAttributeValues(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions)
-	{
+	public Uid removeAttributeValues(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions) {
 		LOG.ok("Entering removeValue with objectClass: {0}", objectClass.toString());
-		try
-		{
-			for(Attribute attribute : attributes)
-			{
+		try {
+			for (Attribute attribute : attributes) {
 				LOG.info("RemoveAttributeValue - Atributo recibido {0}: {1}", attribute.getName(), attribute.getValue());
-				if( attribute.getName().equals("roles"))
-				{		
+				if (RestUsersConnector.ATTR_ROLES.equals(attribute.getName())) {
 					List<Object> revokedRoles = attribute.getValue();
-					for(Object role:revokedRoles)
-					{
+					for (Object role : revokedRoles) {
 						String endpoint = String.format("%s/%s/%s/%s/%s", getConfiguration().getServiceAddress(), PATRONS_ENDPOINT, uid.getUidValue(), ROLES_ENDPOINT, role.toString());
-						LOG.info("Revoking role {0} for user {1} on endpoint {2}", role.toString(), uid.getUidValue(), endpoint);
+						LOG.info("Revoking role {0} for user {1} on endpoint {2}", role, uid.getUidValue(), endpoint);
 						HttpDelete request = new HttpDelete(endpoint);
 						callRequest(request);
 					}
 				}
 			}
-		}
-		catch (Exception io)
-		{
+		} catch (Exception io) {
 			throw new RuntimeException("Error modificando usuario por rest", io);
 		}
 		return uid;
 	}
+
 
 	protected JSONObject callRequest(HttpEntityEnclosingRequestBase request, JSONObject jo) //throws IOException
 	{
@@ -384,9 +400,8 @@ public class RestUsersConnector
 			LOG.info("executeQuery on {0}, query: {1}, options: {2}", objectClass, query, options);
 
 			if (objectClass.is(ObjectClass.ACCOUNT_NAME)) {
-				String baseUrl = getConfiguration().getServiceAddress() + "/api/v1/patrons";
+				String baseUrl = getConfiguration().getServiceAddress() + PATRONS_ENDPOINT;
 
-				// Buscar por UID (puede ser patron_id, userid o cardnumber según tu configuración)
 				if (query != null && query.byUid != null) {
 					String endpoint = baseUrl + "/" + query.byUid;
 					HttpGet request = new HttpGet(endpoint);
@@ -398,10 +413,8 @@ public class RestUsersConnector
 					LOG.info("Called handler.handle on single object of AccountObjectClass");
 
 				} else {
-					// Buscar múltiples usuarios
 					String filters = "";
 					if (query != null && StringUtil.isNotBlank(query.byUsername)) {
-						// Puedes ajustar este filtro según cómo Koha permite búsquedas
 						filters = "?q=userid:" + query.byUsername;
 					}
 
@@ -412,9 +425,7 @@ public class RestUsersConnector
 				}
 
 			} else if (objectClass.is(ObjectClass.GROUP_NAME)) {
-				// Para grupos (roles), si Koha los soporta
-
-				String baseUrl = getConfiguration().getServiceAddress() + "/api/v1/patron_categories";
+				String baseUrl = getConfiguration().getServiceAddress() + ROLES_ENDPOINT;
 
 				if (query != null && query.byUid != null) {
 					HttpGet request = new HttpGet(baseUrl + "/" + query.byUid);
@@ -442,6 +453,7 @@ public class RestUsersConnector
 			throw new RuntimeException(e.getMessage(), e);
 		}
 	}
+
 
 	private boolean handleUsers(HttpGet request, ResultsHandler handler, OperationOptions options, boolean findAll) throws IOException {
 		String responseStr = callRequest(request);
@@ -563,7 +575,7 @@ public class RestUsersConnector
 		}
 
 		try {
-			String endpoint = getConfiguration().getServiceAddress() + "/api/v1/patrons/" + uid.getUidValue();
+			String endpoint = getConfiguration().getServiceAddress() + PATRONS_ENDPOINT + "/" + uid.getUidValue();
 			HttpDelete deleteReq = new HttpDelete(endpoint);
 			callRequest(deleteReq);
 			LOG.info("Deleted Koha patron with UID: {0}", uid.getUidValue());
@@ -572,6 +584,7 @@ public class RestUsersConnector
 			throw new ConnectorException("Error deleting user in Koha: " + ex.getMessage(), ex);
 		}
 	}
+
 
 	@Override
 	public void test()
