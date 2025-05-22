@@ -48,6 +48,8 @@ import org.identityconnectors.framework.spi.operations.UpdateOp;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.identityconnectors.framework.common.objects.Name;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 
 import com.evolveum.polygon.rest.AbstractRestConnector;
@@ -288,6 +290,26 @@ public class RestUsersConnector
 		return uid;
 	}
 
+	private void authHeader(HttpRequestBase request) {
+		String username = getConfiguration().getUsername();
+		GuardedString guardedPassword = getConfiguration().getPassword();
+
+		if (username != null && guardedPassword != null) {
+			final StringBuilder passwordBuilder = new StringBuilder();
+
+			// Desencriptar la contraseña de forma segura
+			guardedPassword.access(clearChars -> passwordBuilder.append(clearChars));
+
+			String password = passwordBuilder.toString();
+			String auth = username + ":" + password;
+			byte[] encodedAuth = java.util.Base64.getEncoder().encode(auth.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			String authHeader = "Basic " + new String(encodedAuth);
+
+			request.setHeader("Authorization", authHeader);
+		} else {
+			LOG.warn("Username or password is null, cannot set Authorization header.");
+		}
+	}
 
 	protected JSONObject callRequest(HttpEntityEnclosingRequestBase request, JSONObject jo) //throws IOException
 	{
