@@ -379,108 +379,147 @@ public class RestUsersConnector
 	}
 
 	@Override
-	public void executeQuery(ObjectClass objectClass, RestUsersFilter query, ResultsHandler handler, OperationOptions options)
-	{
-		try
-		{
+	public void executeQuery(ObjectClass objectClass, RestUsersFilter query, ResultsHandler handler, OperationOptions options) {
+		try {
 			LOG.info("executeQuery on {0}, query: {1}, options: {2}", objectClass, query, options);
-			if (objectClass.is(ObjectClass.ACCOUNT_NAME)) 
-			{
-				// find by Uid (user Primary Key)
-				if (query != null && query.byUid != null)
-				{
-					HttpGet request = new HttpGet(getConfiguration().getServiceAddress() + USERS_ENDPOINT + "/" + query.byUid);
+
+			if (objectClass.is(ObjectClass.ACCOUNT_NAME)) {
+				String baseUrl = getConfiguration().getServiceAddress() + "/api/v1/patrons";
+
+				// Buscar por UID (puede ser patron_id, userid o cardnumber según tu configuración)
+				if (query != null && query.byUid != null) {
+					String endpoint = baseUrl + "/" + query.byUid;
+					HttpGet request = new HttpGet(endpoint);
 					JSONObject response = new JSONObject(callRequest(request));
-					
-					// Json --> midPoint (connectorObject)
+
 					ConnectorObject connectorObject = convertUserToConnectorObject(response);
 					LOG.info("Calling handler.handle on single object of AccountObjectClass");
 					handler.handle(connectorObject);
 					LOG.info("Called handler.handle on single object of AccountObjectClass");
-				} 
-				else
-				{
-					String filters = new String();
-					if(query != null && StringUtil.isNotBlank(query.byUsername))
-					{
-						filters = "?username=" + query.byUsername;
+
+				} else {
+					// Buscar múltiples usuarios
+					String filters = "";
+					if (query != null && StringUtil.isNotBlank(query.byUsername)) {
+						// Puedes ajustar este filtro según cómo Koha permite búsquedas
+						filters = "?q=userid:" + query.byUsername;
 					}
-					// http://xxx/users?username=nro
-					HttpGet request = new HttpGet(getConfiguration().getServiceAddress() + USERS_ENDPOINT + filters);
+
+					HttpGet request = new HttpGet(baseUrl + filters);
 					LOG.info("Calling handleUsers for multiple objects of AccountObjectClass");
 					handleUsers(request, handler, options, false);
 					LOG.info("Called handleUsers for multiple objects of AccountObjectClass");
 				}
-			}
-			else if (objectClass.is(ObjectClass.GROUP_NAME))
-			{
-				// find by Uid (user Primary Key)
-				if (query != null && query.byUid != null)
-				{
-					HttpGet request = new HttpGet(getConfiguration().getServiceAddress() + ROLES_ENDPOINT + "/" + query.byUid);
+
+			} else if (objectClass.is(ObjectClass.GROUP_NAME)) {
+				// Para grupos (roles), si Koha los soporta
+
+				String baseUrl = getConfiguration().getServiceAddress() + "/api/v1/patron_categories";
+
+				if (query != null && query.byUid != null) {
+					HttpGet request = new HttpGet(baseUrl + "/" + query.byUid);
 					JSONObject response = new JSONObject(callRequest(request));
-					
-					// Json --> midPoint (connectorObject)
+
 					ConnectorObject connectorObject = convertRoleToConnectorObject(response);
-					LOG.info("Calling handler.handle on single object of GroupObjectClass");
 					handler.handle(connectorObject);
-					LOG.info("Called handler.handle on single object of GroupObjectClass");
-				} 
-				else
-				{
-					String filters = new String();
-					if(query != null && StringUtil.isNotBlank(query.byName))
-					{
-						filters = "?name=" + query.byName;
+
+				} else {
+					String filters = "";
+					if (query != null && StringUtil.isNotBlank(query.byName)) {
+						filters = "?q=description:" + query.byName;
 					}
-					HttpGet request = new HttpGet(getConfiguration().getServiceAddress() + ROLES_ENDPOINT + filters);
-					LOG.info("Calling handleRoles for multiple objects of GroupObjectClass");
+
+					HttpGet request = new HttpGet(baseUrl + filters);
 					handleRoles(request, handler, options, false);
-					LOG.info("Called handleRoles for multiple objects of GroupObjectClass");
 				}
+
+			} else {
+				throw new ConnectorException("Unsupported object class for query: " + objectClass.getObjectClassValue());
 			}
-		}
-		catch (IOException e)
-		{
-			LOG.error("Error quering objects on Rest Resource", e);
+
+		} catch (IOException e) {
+			LOG.error("Error querying objects on Koha REST API", e);
 			throw new RuntimeException(e.getMessage(), e);
 		}
 	}
-	
-	private boolean handleUsers(HttpGet request, ResultsHandler handler, OperationOptions options, boolean findAll) throws IOException 
-	{
-        JSONArray users = new JSONArray(callRequest(request));
-        LOG.ok("Number of users: {0}", users.length());
 
-        for (int i = 0; i < users.length(); i++) 
-        {
-			// only basic fields
-			JSONObject user = users.getJSONObject(i);
+	private boolean handleUsers(HttpGet request, ResultsHandler handler, OperationOptions options, boolean findAll) throws IOException {
+		String responseStr = callRequest(request);
+		JSONObject root = new JSONObject(responseStr);
+
+		if (!root.has("patrons")) {
+			LOG.error("Respuesta inesperada de Koha: no contiene el array 'patrons'");
+			throw new ConnectorException("Respuesta inesperada: falta 'patrons'");
+		}
+
+		JSONArray patrons = root.getJSONArray("patrons");
+		LOG.ok("Number of patrons retrieved: {0}", patrons.length());
+
+		for (int i = 0; i < patrons.length(); i++) {
+			JSONObject user = patrons.getJSONObject(i);
 			ConnectorObject connectorObject = convertUserToConnectorObject(user);
-			LOG.info("Calling handler.handle inside loop. Iteration #{0}", String.valueOf(i));
+			LOG.info("Calling handler.handle inside loop. Iteration #{0}", i);
 			boolean finish = !handler.handle(connectorObject);
-			LOG.info("Called handler.handle inside loop. Iteration #{0}", String.valueOf(i));
 			if (finish) {
-			    return true;
+				return true; // early termination
 			}
-        }
-        return false;
-    }
+		}
 
-	private ConnectorObject convertUserToConnectorObject(JSONObject user) throws IOException
-	{
+		return false;
+	}
+
+
+	private ConnectorObject convertUserToConnectorObject(JSONObject user) {
 		ConnectorObjectBuilder builder = new ConnectorObjectBuilder();
-		builder.setUid(new Uid(user.get("id").toString()));
-		builder.setName(user.getString(ATTR_USERNAME));
-		
-		addAttr(builder, ATTR_EMAIL, user.getString(ATTR_EMAIL));
-		addAttr(builder, ATTR_FIRST_NAME, user.getString(ATTR_FIRST_NAME));
-		addAttr(builder, ATTR_LAST_NAME, user.getString(ATTR_LAST_NAME));
+
+		// UID (puede ser patron_id, cardnumber o userid)
+		String uid = user.has("patron_id") ? user.get("patron_id").toString() :
+				user.has("cardnumber") ? user.get("cardnumber").toString() :
+						user.has("userid") ? user.get("userid").toString() : null;
+
+		if (uid == null) {
+			throw new ConnectorException("No se pudo determinar UID para el usuario Koha: " + user.toString());
+		}
+
+		builder.setUid(new Uid(uid));
+
+		// Name lógico (MidPoint requiere este campo)
+		if (user.has("userid")) {
+			builder.setName(user.getString("userid"));
+		}
+
+		// Atributos principales
+		addIfPresent(builder, "cardnumber", user);
+		addIfPresent(builder, "userid", user);
+		addIfPresent(builder, "surname", user);
+		addIfPresent(builder, "firstname", user);
+		addIfPresent(builder, "othernames", user);
+		addIfPresent(builder, "email", user);
+		addIfPresent(builder, "emailpro", user);
+		addIfPresent(builder, "phone", user);
+		addIfPresent(builder, "categorycode", user);
+		addIfPresent(builder, "dateexpiry", user);
+		addIfPresent(builder, "sex", user);
+		addIfPresent(builder, "dateofbirth", user);
+		addIfPresent(builder, "sort1", user);
+		addIfPresent(builder, "sort2", user);
+		addIfPresent(builder, "address", user);
+		addIfPresent(builder, "city", user);
+		addIfPresent(builder, "state", user);
+		addIfPresent(builder, "zipcode", user);
+		addIfPresent(builder, "country", user);
 
 		ConnectorObject connectorObject = builder.build();
-		LOG.ok("convertUserToConnectorObject, user: {0}, \n\tconnectorObject: {1}", user.get("id").toString(), connectorObject);
+		LOG.ok("convertUserToConnectorObject → UID: {0}, object: {1}", uid, connectorObject);
 		return connectorObject;
 	}
+
+	private void addIfPresent(ConnectorObjectBuilder builder, String attrName, JSONObject json) {
+		if (json.has(attrName) && !json.isNull(attrName)) {
+			builder.addAttribute(attrName, json.get(attrName).toString());
+		}
+	}
+
 	
 	private boolean handleRoles(HttpGet request, ResultsHandler handler, OperationOptions options, boolean findAll) throws IOException 
 	{
