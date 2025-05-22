@@ -296,9 +296,8 @@ public class RestUsersConnector
 		LOG.ok("Request body: {0}", jo.toString());
 		request.setHeader("Content-Type", "application/json");
 
-		// authHeader(request);
+		authHeader(request);
 
-		
 		
 		HttpEntity entity = new ByteArrayEntity(StringUtils.getBytesUtf8(jo.toString()));
 		request.setEntity(entity);
@@ -327,7 +326,7 @@ public class RestUsersConnector
 		LOG.ok("request URI: {0}", request.getURI());
 		request.setHeader("Content-Type", "application/json");
 
-		// authHeader(request);
+		authHeader(request);
 
 		CloseableHttpResponse response = execute(request);
 		LOG.ok("response: {0}", response);
