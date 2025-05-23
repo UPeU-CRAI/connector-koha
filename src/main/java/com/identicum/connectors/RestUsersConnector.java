@@ -63,8 +63,8 @@ public class RestUsersConnector
 {
 	private static final Log LOG = Log.getLog(RestUsersConnector.class);
 
-	private static final String PATRONS_ENDPOINT = "/api/v1/patrons";
-	private static final String ROLES_ENDPOINT = "/api/v1/patron_categories";
+	private static final String PATRONS_ENDPOINT = "/patrons";
+	private static final String ROLES_ENDPOINT = "/patron_categories";
 
 	// Atributos estándar de usuario (según Koha)
 	public static final String ATTR_USERNAME = "userid";
@@ -176,7 +176,7 @@ public class RestUsersConnector
 		LOG.info("JSON to send to Koha: {0}", jo.toString());
 
 		// Construir endpoint
-		String endpoint = getConfiguration().getServiceAddress() + PATRONS_ENDPOINT;
+		String endpoint = getConfiguration().getServiceAddress() + "/api/v1" + PATRONS_ENDPOINT;
 		HttpEntityEnclosingRequestBase request = new HttpPost(endpoint);
 		response = callRequest(request, jo);
 
