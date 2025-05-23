@@ -479,14 +479,16 @@ public class RestUsersConnector
 
 	private boolean handleUsers(HttpGet request, ResultsHandler handler, OperationOptions options, boolean findAll) throws IOException {
 		String responseStr = callRequest(request);
-		JSONObject root = new JSONObject(responseStr);
 
-		if (!root.has("patrons")) {
-			LOG.error("Respuesta inesperada de Koha: no contiene el array 'patrons'");
-			throw new ConnectorException("Respuesta inesperada: falta 'patrons'");
+		// Koha devuelve un array JSON directo, no un objeto con clave 'patrons'
+		JSONArray patrons;
+		try {
+			patrons = new JSONArray(responseStr);
+		} catch (Exception e) {
+			LOG.error("Respuesta inesperada de Koha: no es un array JSON válido", e);
+			throw new ConnectorException("La respuesta de Koha no es un array JSON válido", e);
 		}
 
-		JSONArray patrons = root.getJSONArray("patrons");
 		LOG.ok("Number of patrons retrieved: {0}", patrons.length());
 
 		for (int i = 0; i < patrons.length(); i++) {
@@ -501,6 +503,7 @@ public class RestUsersConnector
 
 		return false;
 	}
+
 
 
 	private ConnectorObject convertUserToConnectorObject(JSONObject user) {
