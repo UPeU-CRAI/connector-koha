@@ -48,6 +48,7 @@ import org.identityconnectors.framework.spi.operations.UpdateOp;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.identityconnectors.framework.common.objects.Name;
+import org.identityconnectors.common.security.GuardedString;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
@@ -343,24 +344,24 @@ public class RestUsersConnector
 		return new JSONObject(result);
 	}
 
-	protected String callRequest(HttpRequestBase request) throws IOException
-	{
+	protected String callRequest(HttpRequestBase request) throws IOException {
 		LOG.ok("request URI: {0}", request.getURI());
 		request.setHeader("Content-Type", "application/json");
 
+		// ✅ Agrega la autenticación aquí
 		authHeader(request);
 
 		CloseableHttpResponse response = execute(request);
 		LOG.ok("response: {0}", response);
 
 		super.processResponseErrors(response);
-		// processDrupalResponseErrors(response);
 
 		String result = EntityUtils.toString(response.getEntity());
 		LOG.ok("response body: {0}", result);
 		closeResponse(response);
 		return result;
 	}
+
 	
 	public void processResponseErrors(CloseableHttpResponse response) {
         int statusCode = response.getStatusLine().getStatusCode();
