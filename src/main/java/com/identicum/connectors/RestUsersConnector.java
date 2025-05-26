@@ -90,6 +90,31 @@ public class RestUsersConnector
 	public static final String ATTR_ROLES = "roles";
 
 
+	private static final Set<String> ALLOWED_USER_ATTRIBUTES = Set.of(
+			ATTR_USERID, ATTR_SURNAME, ATTR_FIRSTNAME, ATTR_EMAIL, ATTR_EMAILPRO,
+			ATTR_CARDNUMBER, ATTR_EXPIRY_DATE, ATTR_PHONE,
+			ATTR_SEX, ATTR_OTHERNAMES, ATTR_ADDRESS, ATTR_CITY, ATTR_STATE,
+			ATTR_ZIPCODE, ATTR_COUNTRY, ATTR_SORT1, ATTR_SORT2, ATTR_DATEOFBIRTH,
+			ATTR_LIBRARY_ID, ATTR_CATEGORY_ID
+	);
+
+
+
+	private JSONObject buildUserJson(Set<Attribute> attributes, Set<String> allowedAttrs) {
+		JSONObject jo = new JSONObject();
+		for (Attribute attr : attributes) {
+			String name = attr.getName();
+			if (allowedAttrs.contains(name)) {
+				jo.put(name, getStringAttr(attributes, name));
+				LOG.info("Procesado {0}: {1}", name, attr.getValue());
+			} else {
+				LOG.warn("Atributo no permitido ignorado: {0}", name);
+			}
+		}
+		return jo;
+	}
+
+
 
 	@Override
 	public Schema schema() {
@@ -147,48 +172,28 @@ public class RestUsersConnector
 
 	@Override
 	public Uid create(ObjectClass objectClass, Set<Attribute> attributes, OperationOptions operationOptions) {
-		LOG.ok("Entering create with objectClass: {0}", objectClass.toString());
-		JSONObject response;
-		JSONObject jo = new JSONObject();
+		LOG.ok("Entering create with objectClass: {0}", objectClass);
 
 		if (!ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
 			throw new ConnectorException("Unsupported object class: " + objectClass.getObjectClassValue());
 		}
 
-		// Construir el JSON que espera Koha usando constantes
-		jo.put(ATTR_USERID, getStringAttr(attributes, ATTR_USERID));
-		jo.put(ATTR_SURNAME, getStringAttr(attributes, ATTR_SURNAME));
-		jo.put(ATTR_FIRSTNAME, getStringAttr(attributes, ATTR_FIRSTNAME));
-		jo.put(ATTR_EMAIL, getStringAttr(attributes, ATTR_EMAIL));
-		jo.put(ATTR_EMAILPRO, getStringAttr(attributes, ATTR_EMAILPRO));
-		jo.put(ATTR_CARDNUMBER, getStringAttr(attributes, ATTR_CARDNUMBER));
-		jo.put(ATTR_EXPIRY_DATE, getStringAttr(attributes, ATTR_EXPIRY_DATE));
-		jo.put(ATTR_PHONE, getStringAttr(attributes, ATTR_PHONE));
-		jo.put(ATTR_SEX, getStringAttr(attributes, ATTR_SEX));
-		jo.put(ATTR_OTHERNAMES, getStringAttr(attributes, ATTR_OTHERNAMES));
-		jo.put(ATTR_ADDRESS, getStringAttr(attributes, ATTR_ADDRESS));
-		jo.put(ATTR_CITY, getStringAttr(attributes, ATTR_CITY));
-		jo.put(ATTR_STATE, getStringAttr(attributes, ATTR_STATE));
-		jo.put(ATTR_ZIPCODE, getStringAttr(attributes, ATTR_ZIPCODE));
-		jo.put(ATTR_COUNTRY, getStringAttr(attributes, ATTR_COUNTRY));
-		jo.put(ATTR_SORT1, getStringAttr(attributes, ATTR_SORT1));
-		jo.put(ATTR_SORT2, getStringAttr(attributes, ATTR_SORT2));
-		jo.put(ATTR_DATEOFBIRTH, getStringAttr(attributes, ATTR_DATEOFBIRTH));
-		jo.put(ATTR_CATEGORY_ID, getStringAttr(attributes, ATTR_CATEGORY_ID));
-		jo.put(ATTR_LIBRARY_ID, getStringAttr(attributes, ATTR_LIBRARY_ID));
+		// Usar la misma lista blanca que el update
+		Set<String> allowedAttrs = ALLOWED_USER_ATTRIBUTES;
+
+		JSONObject jo = buildUserJson(attributes, allowedAttrs);
 
 		LOG.info("JSON to send to Koha: {0}", jo.toString());
 
-		// Construir endpoint
 		String endpoint = getConfiguration().getServiceAddress() + PATRONS_ENDPOINT;
 		HttpEntityEnclosingRequestBase request = new HttpPost(endpoint);
-		response = callRequest(request, jo);
+		JSONObject response = callRequest(request, jo);
 
-		// Koha devuelve el patron ID como respuesta
-		String newUid = response.has("patron_id") ? response.get("patron_id").toString() :
-				response.has("cardnumber") ? response.get("cardnumber").toString() :
-						response.has("userid") ? response.get("userid").toString() :
-								null;
+		String newUid = response.optString("patron_id",
+				response.optString("cardnumber",
+						response.optString("userid", null)
+				)
+		);
 
 		if (newUid == null) {
 			throw new ConnectorException("Unable to extract UID from Koha response: " + response.toString());
@@ -197,6 +202,7 @@ public class RestUsersConnector
 		LOG.info("Created Koha patron, UID: {0}", newUid);
 		return new Uid(newUid);
 	}
+
 
 	@Override
 	public Uid update(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions) {
@@ -209,13 +215,7 @@ public class RestUsersConnector
 		JSONObject jo = new JSONObject();
 
 		// Lista blanca de atributos permitidos (mismos que Koha espera)
-		Set<String> allowedAttrs = Set.of(
-				ATTR_USERID, ATTR_SURNAME, ATTR_FIRSTNAME, ATTR_EMAIL, ATTR_EMAILPRO,
-				ATTR_CARDNUMBER, ATTR_EXPIRY_DATE, ATTR_PHONE,
-				ATTR_SEX, ATTR_OTHERNAMES, ATTR_ADDRESS, ATTR_CITY, ATTR_STATE,
-				ATTR_ZIPCODE, ATTR_COUNTRY, ATTR_SORT1, ATTR_SORT2, ATTR_DATEOFBIRTH,
-				ATTR_LIBRARY_ID, ATTR_CATEGORY_ID
-		);
+		Set<String> allowedAttrs = ALLOWED_USER_ATTRIBUTES;
 
 		for (Attribute attr : attributes) {
 			String attrName = attr.getName();
