@@ -98,37 +98,37 @@ public class RestUsersConnector
 		accountBuilder.setType(ObjectClass.ACCOUNT_NAME);
 
 		// Identificadores obligatorios
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("userid").setRequired(true).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("cardnumber").setRequired(true).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_USERID).setRequired(true).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_CARDNUMBER).setRequired(true).build());
 
 		// Datos personales
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("firstname").setRequired(true).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("surname").setRequired(true).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("othernames").build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("sex").build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("dateofbirth").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_FIRSTNAME).setRequired(true).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SURNAME).setRequired(true).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_OTHERNAMES).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SEX).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_DATEOFBIRTH).build());
 
 		// Contacto
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("email").build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("emailpro").build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("phone").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_EMAIL).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_EMAILPRO).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_PHONE).build());
 
 		// Dirección
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("address").build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("city").build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("state").build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("zipcode").build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("country").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ADDRESS).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_CITY).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_STATE).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ZIPCODE).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_COUNTRY).build());
 
 		// Clasificación académica
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("sort1").build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("sort2").build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SORT1).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SORT2).build());
 
 		// Expiración y categoría
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("dateexpiry").build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder("categorycode").setRequired(true).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_EXPIRY_DATE).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_CATEGORYCODE).setRequired(true).build());
 
-// UID y nombre (necesario para ConnId)
+		// UID y nombre (necesario para ConnId)
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(Name.NAME).setRequired(true).build());
 
 		schemaBuilder.defineObjectClass(accountBuilder.build());
@@ -141,6 +141,7 @@ public class RestUsersConnector
 		LOG.ok("Exiting schema");
 		return schemaBuilder.build();
 	}
+
 
 	@Override
 	public Uid create(ObjectClass objectClass, Set<Attribute> attributes, OperationOptions operationOptions) {
@@ -526,25 +527,25 @@ public class RestUsersConnector
 		}
 
 		// Atributos principales
-		addIfPresent(builder, "cardnumber", user);
-		addIfPresent(builder, "userid", user);
-		addIfPresent(builder, "surname", user);
-		addIfPresent(builder, "firstname", user);
-		addIfPresent(builder, "othernames", user);
-		addIfPresent(builder, "email", user);
-		addIfPresent(builder, "emailpro", user);
-		addIfPresent(builder, "phone", user);
-		addIfPresent(builder, "categorycode", user);
-		addIfPresent(builder, "dateexpiry", user);
-		addIfPresent(builder, "sex", user);
-		addIfPresent(builder, "dateofbirth", user);
-		addIfPresent(builder, "sort1", user);
-		addIfPresent(builder, "sort2", user);
-		addIfPresent(builder, "address", user);
-		addIfPresent(builder, "city", user);
-		addIfPresent(builder, "state", user);
-		addIfPresent(builder, "zipcode", user);
-		addIfPresent(builder, "country", user);
+		addIfPresent(builder, ATTR_CARDNUMBER, user);
+		addIfPresent(builder, ATTR_USERID, user);
+		addIfPresent(builder, ATTR_SURNAME, user);
+		addIfPresent(builder, ATTR_FIRSTNAME, user);
+		addIfPresent(builder, ATTR_OTHERNAMES, user);
+		addIfPresent(builder, ATTR_EMAIL, user);
+		addIfPresent(builder, ATTR_EMAILPRO, user);
+		addIfPresent(builder, ATTR_PHONE, user);
+		addIfPresent(builder, ATTR_CATEGORYCODE, user);
+		addIfPresent(builder, ATTR_EXPIRY_DATE, user);
+		addIfPresent(builder, ATTR_SEX, user);
+		addIfPresent(builder, ATTR_DATEOFBIRTH, user);
+		addIfPresent(builder, ATTR_SORT1, user);
+		addIfPresent(builder, ATTR_SORT2, user);
+		addIfPresent(builder, ATTR_ADDRESS, user);
+		addIfPresent(builder, ATTR_CITY, user);
+		addIfPresent(builder, ATTR_STATE, user);
+		addIfPresent(builder, ATTR_ZIPCODE, user);
+		addIfPresent(builder, ATTR_COUNTRY, user);
 
 		ConnectorObject connectorObject = builder.build();
 		LOG.ok("convertUserToConnectorObject → UID: {0}, object: {1}", uid, connectorObject);
