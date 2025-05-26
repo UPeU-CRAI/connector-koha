@@ -1,8 +1,10 @@
 package com.identicum.connectors;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
+import java.util.Base64;
 
 import org.apache.commons.codec.binary.StringUtils;
 import org.apache.http.HttpEntity;
@@ -49,8 +51,6 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.identityconnectors.framework.common.objects.Name;
 import org.identityconnectors.common.security.GuardedString;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 
 
 import com.evolveum.polygon.rest.AbstractRestConnector;
@@ -77,7 +77,7 @@ public class RestUsersConnector
 	public static final String ATTR_USERID = "userid";
 	public static final String ATTR_CARDNUMBER = "cardnumber";
 	public static final String ATTR_CATEGORYCODE = "categorycode";
-	public static final String ATTR_DATEEXPIRY = "dateexpiry";
+	public static final String ATTR_EXPIRY_DATE = "expiry_date";
 	public static final String ATTR_SEX = "sex";
 	public static final String ATTR_DATEOFBIRTH = "dateofbirth";
 	public static final String ATTR_SORT1 = "sort1";
@@ -160,7 +160,7 @@ public class RestUsersConnector
 		jo.put(ATTR_EMAILPRO, getStringAttr(attributes, ATTR_EMAILPRO));
 		jo.put(ATTR_CARDNUMBER, getStringAttr(attributes, ATTR_CARDNUMBER));
 		jo.put(ATTR_CATEGORYCODE, getStringAttr(attributes, ATTR_CATEGORYCODE));
-		jo.put(ATTR_DATEEXPIRY, getStringAttr(attributes, ATTR_DATEEXPIRY));
+		jo.put(ATTR_EXPIRY_DATE, getStringAttr(attributes, ATTR_EXPIRY_DATE));
 		jo.put(ATTR_PHONE, getStringAttr(attributes, ATTR_PHONE));
 		jo.put(ATTR_SEX, getStringAttr(attributes, ATTR_SEX));
 		jo.put(ATTR_OTHERNAMES, getStringAttr(attributes, ATTR_OTHERNAMES));
@@ -207,7 +207,7 @@ public class RestUsersConnector
 		// Lista blanca de atributos permitidos
 		Set<String> allowedAttrs = Set.of(
 				ATTR_USERID, ATTR_SURNAME, ATTR_FIRSTNAME, ATTR_EMAIL, ATTR_EMAILPRO,
-				ATTR_CARDNUMBER, ATTR_CATEGORYCODE, ATTR_DATEEXPIRY, ATTR_PHONE,
+				ATTR_CARDNUMBER, ATTR_CATEGORYCODE, ATTR_EXPIRY_DATE, ATTR_PHONE,
 				ATTR_SEX, ATTR_OTHERNAMES, ATTR_ADDRESS, ATTR_CITY, ATTR_STATE,
 				ATTR_ZIPCODE, ATTR_COUNTRY, ATTR_SORT1, ATTR_SORT2, ATTR_DATEOFBIRTH
 		);
@@ -303,7 +303,7 @@ public class RestUsersConnector
 
 			String password = passwordBuilder.toString();
 			String auth = username + ":" + password;
-			byte[] encodedAuth = java.util.Base64.getEncoder().encode(auth.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			byte[] encodedAuth = Base64.getEncoder().encode(auth.getBytes(StandardCharsets.UTF_8));
 			String authHeader = "Basic " + new String(encodedAuth);
 
 			request.setHeader("Authorization", authHeader);
