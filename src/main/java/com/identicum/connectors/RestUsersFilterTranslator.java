@@ -30,7 +30,7 @@ public class RestUsersFilterTranslator extends AbstractFilterTranslator<RestUser
                 return lf;
             }
         }
-        else if (RestUsersConnector.ATTR_USERNAME.equals(attr.getName())) {
+        else if (RestUsersConnector.ATTR_USERID.equals(attr.getName())) {
             if (attr.getValue() != null && attr.getValue().get(0) != null) {
             	RestUsersFilter lf = new RestUsersFilter();
                 lf.byUsername = String.valueOf(attr.getValue().get(0));
