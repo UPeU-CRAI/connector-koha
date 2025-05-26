@@ -212,23 +212,7 @@ public class RestUsersConnector
 			throw new ConnectorException("Unsupported object class: " + objectClass.getObjectClassValue());
 		}
 
-		JSONObject jo = new JSONObject();
-
-		// Lista blanca de atributos permitidos (mismos que Koha espera)
-		Set<String> allowedAttrs = ALLOWED_USER_ATTRIBUTES;
-
-		for (Attribute attr : attributes) {
-			String attrName = attr.getName();
-
-			if (!allowedAttrs.contains(attrName)) {
-				LOG.warn("Atributo no permitido ignorado: {0}", attrName);
-				continue;
-			}
-
-			// Todos los nombres ya son compatibles con Koha (no necesitas renombrar)
-			jo.put(attrName, getStringAttr(attributes, attrName));
-			LOG.info("Update - Atributo procesado {0}: {1}", attrName, attr.getValue());
-		}
+		JSONObject jo = buildUserJson(attributes, ALLOWED_USER_ATTRIBUTES);
 
 		LOG.info("JSON delta to send to Koha: {0}", jo.toString());
 
