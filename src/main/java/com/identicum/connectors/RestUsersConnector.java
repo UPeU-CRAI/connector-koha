@@ -91,6 +91,7 @@ public class RestUsersConnector
 	public static final String ATTR_ROLES = "roles";
 
 
+
 	@Override
 	public Schema schema() {
 		LOG.ok("Reading schema");
