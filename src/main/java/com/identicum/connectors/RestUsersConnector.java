@@ -87,6 +87,7 @@ public class RestUsersConnector
 	public static final String ATTR_STATE = "state";
 	public static final String ATTR_ZIPCODE = "zipcode";
 	public static final String ATTR_COUNTRY = "country";
+	public static final String ATTR_LIBRARY_ID = "library_id";
 	public static final String ATTR_ROLES = "roles";
 
 
@@ -100,6 +101,7 @@ public class RestUsersConnector
 		// Identificadores obligatorios
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_USERID).setRequired(true).build());
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_CARDNUMBER).setRequired(true).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_LIBRARY_ID).setRequired(true).build());
 
 		// Datos personales
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_FIRSTNAME).setRequired(true).build());
@@ -173,6 +175,8 @@ public class RestUsersConnector
 		jo.put(ATTR_SORT1, getStringAttr(attributes, ATTR_SORT1));
 		jo.put(ATTR_SORT2, getStringAttr(attributes, ATTR_SORT2));
 		jo.put(ATTR_DATEOFBIRTH, getStringAttr(attributes, ATTR_DATEOFBIRTH));
+		jo.put(ATTR_CATEGORYCODE, getStringAttr(attributes, ATTR_CATEGORYCODE));
+		jo.put(ATTR_LIBRARY_ID, getStringAttr(attributes, ATTR_LIBRARY_ID));
 
 		LOG.info("JSON to send to Koha: {0}", jo.toString());
 
@@ -208,16 +212,25 @@ public class RestUsersConnector
 		// Lista blanca de atributos permitidos
 		Set<String> allowedAttrs = Set.of(
 				ATTR_USERID, ATTR_SURNAME, ATTR_FIRSTNAME, ATTR_EMAIL, ATTR_EMAILPRO,
-				ATTR_CARDNUMBER, ATTR_CATEGORYCODE, ATTR_EXPIRY_DATE, ATTR_PHONE,
+				ATTR_CARDNUMBER, ATTR_EXPIRY_DATE, ATTR_PHONE,
 				ATTR_SEX, ATTR_OTHERNAMES, ATTR_ADDRESS, ATTR_CITY, ATTR_STATE,
-				ATTR_ZIPCODE, ATTR_COUNTRY, ATTR_SORT1, ATTR_SORT2, ATTR_DATEOFBIRTH
+				ATTR_ZIPCODE, ATTR_COUNTRY, ATTR_SORT1, ATTR_SORT2, ATTR_DATEOFBIRTH,
+				ATTR_LIBRARY_ID, ATTR_CATEGORYCODE // se necesita para generar los campos reales
 		);
 
 		for (Attribute attribute : attributes) {
 			String attrName = attribute.getName();
 			if (allowedAttrs.contains(attrName)) {
 				LOG.info("Update - Atributo recibido {0}: {1}", attrName, attribute.getValue());
-				jo.put(attrName, getStringAttr(attributes, attrName));
+
+				// Renombrar correctamente los campos esperados por Koha
+				if (ATTR_CATEGORYCODE.equals(attrName)) {
+					jo.put("category_id", getStringAttr(attributes, attrName)); // Koha espera "category_id"
+				} else if (ATTR_LIBRARY_ID.equals(attrName)) {
+					jo.put("library_id", getStringAttr(attributes, attrName));  // Koha espera "library_id"
+				} else {
+					jo.put(attrName, getStringAttr(attributes, attrName));
+				}
 			} else {
 				LOG.warn("Atributo no permitido ignorado: {0}", attrName);
 			}
@@ -243,6 +256,7 @@ public class RestUsersConnector
 			throw new RuntimeException("Error actualizando usuario en Koha", e);
 		}
 	}
+
 
 
 	@Override
