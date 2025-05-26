@@ -67,14 +67,13 @@ public class RestUsersConnector
 	private static final String ROLES_ENDPOINT = "/api/v1/patron_categories";
 
 	// Atributos estándar de usuario (según Koha)
-	public static final String ATTR_USERNAME = "userid";
+	public static final String ATTR_USERID = "userid";
 	public static final String ATTR_FIRSTNAME = "firstname";
 	public static final String ATTR_SURNAME = "surname";
 	public static final String ATTR_OTHERNAMES = "othernames";
 	public static final String ATTR_EMAIL = "email";
 	public static final String ATTR_EMAILPRO = "emailpro";
 	public static final String ATTR_PHONE = "phone";
-	public static final String ATTR_USERID = "userid";
 	public static final String ATTR_CARDNUMBER = "cardnumber";
 	public static final String ATTR_CATEGORY_ID = "category_id";
 	public static final String ATTR_EXPIRY_DATE = "expiry_date";
@@ -201,7 +200,7 @@ public class RestUsersConnector
 
 	@Override
 	public Uid update(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions) {
-		LOG.ok("Entering update with objectClass: {0}", objectClass.toString());
+		LOG.ok("Entering update with objectClass: {0}", objectClass);
 
 		if (!ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
 			throw new ConnectorException("Unsupported object class: " + objectClass.getObjectClassValue());
@@ -209,31 +208,26 @@ public class RestUsersConnector
 
 		JSONObject jo = new JSONObject();
 
-		// Lista blanca de atributos permitidos
+		// Lista blanca de atributos permitidos (mismos que Koha espera)
 		Set<String> allowedAttrs = Set.of(
 				ATTR_USERID, ATTR_SURNAME, ATTR_FIRSTNAME, ATTR_EMAIL, ATTR_EMAILPRO,
 				ATTR_CARDNUMBER, ATTR_EXPIRY_DATE, ATTR_PHONE,
 				ATTR_SEX, ATTR_OTHERNAMES, ATTR_ADDRESS, ATTR_CITY, ATTR_STATE,
 				ATTR_ZIPCODE, ATTR_COUNTRY, ATTR_SORT1, ATTR_SORT2, ATTR_DATEOFBIRTH,
-				ATTR_LIBRARY_ID, ATTR_CATEGORY_ID // se necesita para generar los campos reales
+				ATTR_LIBRARY_ID, ATTR_CATEGORY_ID
 		);
 
-		for (Attribute attribute : attributes) {
-			String attrName = attribute.getName();
-			if (allowedAttrs.contains(attrName)) {
-				LOG.info("Update - Atributo recibido {0}: {1}", attrName, attribute.getValue());
+		for (Attribute attr : attributes) {
+			String attrName = attr.getName();
 
-				// Renombrar correctamente los campos esperados por Koha
-				if (ATTR_CATEGORY_ID.equals(attrName)) {
-					jo.put("category_id", getStringAttr(attributes, attrName)); // Koha espera "category_id"
-				} else if (ATTR_LIBRARY_ID.equals(attrName)) {
-					jo.put("library_id", getStringAttr(attributes, attrName));  // Koha espera "library_id"
-				} else {
-					jo.put(attrName, getStringAttr(attributes, attrName));
-				}
-			} else {
+			if (!allowedAttrs.contains(attrName)) {
 				LOG.warn("Atributo no permitido ignorado: {0}", attrName);
+				continue;
 			}
+
+			// Todos los nombres ya son compatibles con Koha (no necesitas renombrar)
+			jo.put(attrName, getStringAttr(attributes, attrName));
+			LOG.info("Update - Atributo procesado {0}: {1}", attrName, attr.getValue());
 		}
 
 		LOG.info("JSON delta to send to Koha: {0}", jo.toString());
@@ -244,18 +238,20 @@ public class RestUsersConnector
 			HttpEntityEnclosingRequestBase request = new HttpPatch(endpoint);
 			JSONObject response = callRequest(request, jo);
 
-			String newUid = response.has("patron_id") ? response.get("patron_id").toString() :
-					response.has("cardnumber") ? response.get("cardnumber").toString() :
-							response.has("userid") ? response.get("userid").toString() :
-									uid.getUidValue();
+			String newUid = response.optString("patron_id",
+					response.optString("cardnumber",
+							response.optString("userid", uid.getUidValue())
+					)
+			);
 
 			LOG.info("Updated Koha patron, UID: {0}", newUid);
 			return new Uid(newUid);
 
 		} catch (Exception e) {
-			throw new RuntimeException("Error actualizando usuario en Koha", e);
+			throw new ConnectorException("Error actualizando usuario en Koha", e);
 		}
 	}
+
 
 
 
@@ -594,7 +590,7 @@ public class RestUsersConnector
 	private ConnectorObject convertRoleToConnectorObject(JSONObject role) throws IOException {
 		ConnectorObjectBuilder builder = new ConnectorObjectBuilder(); // 💥 ESTA LÍNEA FALTABA
 
-		builder.setUid(new Uid(role.getString("categorycode")));
+		builder.setUid(new Uid(role.getString("category_id")));
 		builder.setName(role.getString("description"));
 
 		addIfPresent(builder, "enrolmentperiod", role);
