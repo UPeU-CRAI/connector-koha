@@ -76,7 +76,7 @@ public class RestUsersConnector
 	public static final String ATTR_PHONE = "phone";
 	public static final String ATTR_USERID = "userid";
 	public static final String ATTR_CARDNUMBER = "cardnumber";
-	public static final String ATTR_CATEGORYCODE = "categorycode";
+	public static final String ATTR_CATEGORY_ID = "category_id";
 	public static final String ATTR_EXPIRY_DATE = "expiry_date";
 	public static final String ATTR_SEX = "sex";
 	public static final String ATTR_DATEOFBIRTH = "dateofbirth";
@@ -129,7 +129,7 @@ public class RestUsersConnector
 
 		// Expiración y categoría
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_EXPIRY_DATE).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_CATEGORYCODE).setRequired(true).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_CATEGORY_ID).setRequired(true).build());
 
 		// UID y nombre (necesario para ConnId)
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(Name.NAME).setRequired(true).build());
@@ -163,7 +163,6 @@ public class RestUsersConnector
 		jo.put(ATTR_EMAIL, getStringAttr(attributes, ATTR_EMAIL));
 		jo.put(ATTR_EMAILPRO, getStringAttr(attributes, ATTR_EMAILPRO));
 		jo.put(ATTR_CARDNUMBER, getStringAttr(attributes, ATTR_CARDNUMBER));
-		jo.put(ATTR_CATEGORYCODE, getStringAttr(attributes, ATTR_CATEGORYCODE));
 		jo.put(ATTR_EXPIRY_DATE, getStringAttr(attributes, ATTR_EXPIRY_DATE));
 		jo.put(ATTR_PHONE, getStringAttr(attributes, ATTR_PHONE));
 		jo.put(ATTR_SEX, getStringAttr(attributes, ATTR_SEX));
@@ -176,7 +175,7 @@ public class RestUsersConnector
 		jo.put(ATTR_SORT1, getStringAttr(attributes, ATTR_SORT1));
 		jo.put(ATTR_SORT2, getStringAttr(attributes, ATTR_SORT2));
 		jo.put(ATTR_DATEOFBIRTH, getStringAttr(attributes, ATTR_DATEOFBIRTH));
-		jo.put(ATTR_CATEGORYCODE, getStringAttr(attributes, ATTR_CATEGORYCODE));
+		jo.put(ATTR_CATEGORY_ID, getStringAttr(attributes, ATTR_CATEGORY_ID));
 		jo.put(ATTR_LIBRARY_ID, getStringAttr(attributes, ATTR_LIBRARY_ID));
 
 		LOG.info("JSON to send to Koha: {0}", jo.toString());
@@ -216,7 +215,7 @@ public class RestUsersConnector
 				ATTR_CARDNUMBER, ATTR_EXPIRY_DATE, ATTR_PHONE,
 				ATTR_SEX, ATTR_OTHERNAMES, ATTR_ADDRESS, ATTR_CITY, ATTR_STATE,
 				ATTR_ZIPCODE, ATTR_COUNTRY, ATTR_SORT1, ATTR_SORT2, ATTR_DATEOFBIRTH,
-				ATTR_LIBRARY_ID, ATTR_CATEGORYCODE // se necesita para generar los campos reales
+				ATTR_LIBRARY_ID, ATTR_CATEGORY_ID // se necesita para generar los campos reales
 		);
 
 		for (Attribute attribute : attributes) {
@@ -225,7 +224,7 @@ public class RestUsersConnector
 				LOG.info("Update - Atributo recibido {0}: {1}", attrName, attribute.getValue());
 
 				// Renombrar correctamente los campos esperados por Koha
-				if (ATTR_CATEGORYCODE.equals(attrName)) {
+				if (ATTR_CATEGORY_ID.equals(attrName)) {
 					jo.put("category_id", getStringAttr(attributes, attrName)); // Koha espera "category_id"
 				} else if (ATTR_LIBRARY_ID.equals(attrName)) {
 					jo.put("library_id", getStringAttr(attributes, attrName));  // Koha espera "library_id"
@@ -550,7 +549,7 @@ public class RestUsersConnector
 		addIfPresent(builder, ATTR_EMAIL, user);
 		addIfPresent(builder, ATTR_EMAILPRO, user);
 		addIfPresent(builder, ATTR_PHONE, user);
-		addIfPresent(builder, ATTR_CATEGORYCODE, user);
+		addIfPresent(builder, ATTR_CATEGORY_ID, user);
 		addIfPresent(builder, ATTR_EXPIRY_DATE, user);
 		addIfPresent(builder, ATTR_SEX, user);
 		addIfPresent(builder, ATTR_DATEOFBIRTH, user);
