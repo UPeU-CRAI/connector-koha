@@ -189,7 +189,7 @@ public class RestUsersConnector
 		return jo;
 	}
 
-	// 🔍 Utilidad: Extrae el valor de un atributo permitido para construir el JSON del usuario
+	// Extrae el valor en formato String del atributo especificado si está presente
 	@Override
 	protected String getStringAttr(Set<Attribute> attributes, String name) {
 		for (Attribute attr : attributes) {
