@@ -61,6 +61,9 @@ public class RestUsersConnector
 		extends AbstractRestConnector<RestUsersConfiguration>
 		implements CreateOp, UpdateOp, SchemaOp, SearchOp<RestUsersFilter>, DeleteOp, UpdateAttributeValuesOp, TestOp, TestApiOp {
 
+	// ==========================================================
+	// 🔹 Configuración estática y atributos estándar del conector
+	// ==========================================================
 	private static final Log LOG = Log.getLog(RestUsersConnector.class);
 
 	private static final String PATRONS_ENDPOINT = "/api/v1/patrons";
@@ -167,8 +170,21 @@ public class RestUsersConnector
 		return jo;
 	}
 
+	@Override
+	protected String getStringAttr(Set<Attribute> attributes, String name) {
+		for (Attribute attr : attributes) {
+			if (attr.getName().equals(name) && attr.getValue() != null && !attr.getValue().isEmpty()) {
+				return attr.getValue().get(0).toString();
+			}
+		}
+		return null;
+	}
 
 
+
+	// ====================================================
+	// 🔹 Operaciones de búsqueda y definición de esquema
+	// ====================================================
 	@Override
 	public Schema schema() {
 		LOG.ok("Reading schema");
@@ -221,7 +237,9 @@ public class RestUsersConnector
 		return schemaBuilder.build();
 	}
 
-
+	// ====================================
+	// 🔹 Operaciones CRUD (usuario Koha)
+	// ====================================
 	@Override
 	public Uid create(ObjectClass objectClass, Set<Attribute> attributes, OperationOptions operationOptions) {
 		LOG.ok("Entering create with objectClass: {0}", objectClass);
@@ -297,7 +315,7 @@ public class RestUsersConnector
 		try {
 			for (Attribute attribute : attributes) {
 				LOG.info("AddAttributeValue - Atributo recibido {0}: {1}", attribute.getName(), attribute.getValue());
-				if (RestUsersConnector.ATTR_ROLES.equals(attribute.getName())) {
+				if (ATTR_ROLES.equals(attribute.getName())) {
 					List<Object> addedRoles = attribute.getValue();
 					for (Object role : addedRoles) {
 						JSONObject json = new JSONObject();
@@ -322,7 +340,7 @@ public class RestUsersConnector
 		try {
 			for (Attribute attribute : attributes) {
 				LOG.info("RemoveAttributeValue - Atributo recibido {0}: {1}", attribute.getName(), attribute.getValue());
-				if (RestUsersConnector.ATTR_ROLES.equals(attribute.getName())) {
+				if (ATTR_ROLES.equals(attribute.getName())) {
 					List<Object> revokedRoles = attribute.getValue();
 					for (Object role : revokedRoles) {
 						String endpoint = String.format("%s/%s/%s/%s/%s", getConfiguration().getServiceAddress(), PATRONS_ENDPOINT, uid.getUidValue(), ROLES_ENDPOINT, role.toString());
@@ -338,6 +356,9 @@ public class RestUsersConnector
 		return uid;
 	}
 
+	// ========================================
+	// 🔹 Utilitarios HTTP y helpers comunes
+	// ========================================
 	private void authHeader(HttpRequestBase request) {
 		String username = getConfiguration().getUsername();
 		GuardedString guardedPassword = getConfiguration().getPassword();
@@ -552,7 +573,9 @@ public class RestUsersConnector
 	}
 
 
-
+	// ===========================
+	// 🔹 Conversión de objetos
+	// ===========================
 	private ConnectorObject convertUserToConnectorObject(JSONObject user) {
 		ConnectorObjectBuilder builder = new ConnectorObjectBuilder();
 
@@ -656,7 +679,9 @@ public class RestUsersConnector
 		}
 	}
 
-
+	// ======================
+	// 🔹 Test de conectividad
+	// ======================
 	@Override
 	public void test()
 	{
