@@ -57,46 +57,100 @@ import com.evolveum.polygon.rest.AbstractRestConnector;
 
 
 @ConnectorClass(displayNameKey = "connector.identicum.rest.display", configurationClass = RestUsersConfiguration.class)
-public class RestUsersConnector 
-	extends AbstractRestConnector<RestUsersConfiguration> 
-	implements CreateOp, UpdateOp, SchemaOp, SearchOp<RestUsersFilter>, DeleteOp, UpdateAttributeValuesOp, TestOp, TestApiOp
-{
+public class RestUsersConnector
+		extends AbstractRestConnector<RestUsersConfiguration>
+		implements CreateOp, UpdateOp, SchemaOp, SearchOp<RestUsersFilter>, DeleteOp, UpdateAttributeValuesOp, TestOp, TestApiOp {
+
 	private static final Log LOG = Log.getLog(RestUsersConnector.class);
 
 	private static final String PATRONS_ENDPOINT = "/api/v1/patrons";
 	private static final String ROLES_ENDPOINT = "/api/v1/patron_categories";
 
-	// Atributos estándar de usuario (según Koha)
+	// Atributos estándar de usuario (según API de Koha)
 	public static final String ATTR_USERID = "userid";
 	public static final String ATTR_FIRSTNAME = "firstname";
 	public static final String ATTR_SURNAME = "surname";
-	public static final String ATTR_OTHERNAMES = "othernames";
+	public static final String ATTR_OTHER_NAME = "other_name";
 	public static final String ATTR_EMAIL = "email";
-	public static final String ATTR_EMAILPRO = "emailpro";
 	public static final String ATTR_PHONE = "phone";
+	public static final String ATTR_MOBILE = "mobile";
+	public static final String ATTR_SECONDARY_EMAIL = "secondary_email";
+	public static final String ATTR_SECONDARY_PHONE = "secondary_phone";
+	public static final String ATTR_SMS_NUMBER = "sms_number";
+	public static final String ATTR_SMS_PROVIDER_ID = "sms_provider_id";
+
 	public static final String ATTR_CARDNUMBER = "cardnumber";
 	public static final String ATTR_CATEGORY_ID = "category_id";
 	public static final String ATTR_EXPIRY_DATE = "expiry_date";
-	public static final String ATTR_SEX = "sex";
-	public static final String ATTR_DATEOFBIRTH = "dateofbirth";
-	public static final String ATTR_SORT1 = "sort1";
-	public static final String ATTR_SORT2 = "sort2";
+	public static final String ATTR_GENDER = "gender";
+	public static final String ATTR_DATE_OF_BIRTH = "date_of_birth";
+	public static final String ATTR_STATISTICS_1 = "statistics_1";
+	public static final String ATTR_STATISTICS_2 = "statistics_2";
+
 	public static final String ATTR_ADDRESS = "address";
+	public static final String ATTR_ADDRESS2 = "address2";
 	public static final String ATTR_CITY = "city";
 	public static final String ATTR_STATE = "state";
-	public static final String ATTR_ZIPCODE = "zipcode";
+	public static final String ATTR_ZIPCODE = "zipcode"; // zip legacy
+	public static final String ATTR_POSTAL_CODE = "postal_code"; // preferido
 	public static final String ATTR_COUNTRY = "country";
 	public static final String ATTR_LIBRARY_ID = "library_id";
+
+	public static final String ATTR_OPAC_NOTES = "opac_notes";
+	public static final String ATTR_STAFF_NOTES = "staff_notes";
+
+	// Direcciones alternativas
+	public static final String ATTR_ALTADDRESS_ADDRESS = "altaddress_address";
+	public static final String ATTR_ALTADDRESS_ADDRESS2 = "altaddress_address2";
+	public static final String ATTR_ALTADDRESS_CITY = "altaddress_city";
+	public static final String ATTR_ALTADDRESS_STATE = "altaddress_state";
+	public static final String ATTR_ALTADDRESS_POSTAL_CODE = "altaddress_postal_code";
+	public static final String ATTR_ALTADDRESS_COUNTRY = "altaddress_country";
+	public static final String ATTR_ALTADDRESS_PHONE = "altaddress_phone";
+	public static final String ATTR_ALTADDRESS_EMAIL = "altaddress_email";
+
+	// Contacto alternativo
+	public static final String ATTR_ALTCONTACT_FIRSTNAME = "altcontact_firstname";
+	public static final String ATTR_ALTCONTACT_SURNAME = "altcontact_surname";
+	public static final String ATTR_ALTCONTACT_PHONE = "altcontact_phone";
+	public static final String ATTR_ALTCONTACT_ADDRESS = "altcontact_address";
+	public static final String ATTR_ALTCONTACT_ADDRESS2 = "altcontact_address2";
+	public static final String ATTR_ALTCONTACT_CITY = "altcontact_city";
+	public static final String ATTR_ALTCONTACT_STATE = "altcontact_state";
+	public static final String ATTR_ALTCONTACT_COUNTRY = "altcontact_country";
+	public static final String ATTR_ALTCONTACT_POSTAL_CODE = "altcontact_postal_code";
+
+	// Otros
+	public static final String ATTR_PROTECTED = "protected";
+	public static final String ATTR_ANONYMIZED = "anonymized";
+	public static final String ATTR_PRIVACY = "privacy";
+	public static final String ATTR_PATRON_CARD_LOST = "patron_card_lost";
+
 	public static final String ATTR_ROLES = "roles";
 
-
+	// Atributos permitidos que pueden ser enviados a Koha
 	private static final Set<String> ALLOWED_USER_ATTRIBUTES = Set.of(
-			ATTR_USERID, ATTR_SURNAME, ATTR_FIRSTNAME, ATTR_EMAIL, ATTR_EMAILPRO,
-			ATTR_CARDNUMBER, ATTR_EXPIRY_DATE, ATTR_PHONE,
-			ATTR_SEX, ATTR_OTHERNAMES, ATTR_ADDRESS, ATTR_CITY, ATTR_STATE,
-			ATTR_ZIPCODE, ATTR_COUNTRY, ATTR_SORT1, ATTR_SORT2, ATTR_DATEOFBIRTH,
-			ATTR_LIBRARY_ID, ATTR_CATEGORY_ID
+			ATTR_USERID, ATTR_FIRSTNAME, ATTR_SURNAME, ATTR_OTHER_NAME,
+			ATTR_EMAIL, ATTR_PHONE, ATTR_MOBILE,
+			ATTR_SECONDARY_EMAIL, ATTR_SECONDARY_PHONE,
+			ATTR_SMS_NUMBER, ATTR_SMS_PROVIDER_ID,
+			ATTR_CARDNUMBER, ATTR_CATEGORY_ID, ATTR_EXPIRY_DATE,
+			ATTR_GENDER, ATTR_DATE_OF_BIRTH, ATTR_STATISTICS_1, ATTR_STATISTICS_2,
+			ATTR_ADDRESS, ATTR_ADDRESS2, ATTR_CITY, ATTR_STATE,
+			ATTR_ZIPCODE, ATTR_POSTAL_CODE, ATTR_COUNTRY,
+			ATTR_LIBRARY_ID, ATTR_OPAC_NOTES, ATTR_STAFF_NOTES,
+			ATTR_ALTADDRESS_ADDRESS, ATTR_ALTADDRESS_ADDRESS2,
+			ATTR_ALTADDRESS_CITY, ATTR_ALTADDRESS_STATE,
+			ATTR_ALTADDRESS_POSTAL_CODE, ATTR_ALTADDRESS_COUNTRY,
+			ATTR_ALTADDRESS_PHONE, ATTR_ALTADDRESS_EMAIL,
+			ATTR_ALTCONTACT_FIRSTNAME, ATTR_ALTCONTACT_SURNAME,
+			ATTR_ALTCONTACT_PHONE, ATTR_ALTCONTACT_ADDRESS,
+			ATTR_ALTCONTACT_ADDRESS2, ATTR_ALTCONTACT_CITY,
+			ATTR_ALTCONTACT_STATE, ATTR_ALTCONTACT_COUNTRY,
+			ATTR_ALTCONTACT_POSTAL_CODE,
+			ATTR_PROTECTED, ATTR_ANONYMIZED, ATTR_PRIVACY, ATTR_PATRON_CARD_LOST
 	);
+}
 
 
 
@@ -131,13 +185,12 @@ public class RestUsersConnector
 		// Datos personales
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_FIRSTNAME).setRequired(true).build());
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SURNAME).setRequired(true).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_OTHERNAMES).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SEX).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_DATEOFBIRTH).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_OTHER_NAME).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_GENDER).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_DATE_OF_BIRTH).build());
 
 		// Contacto
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_EMAIL).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_EMAILPRO).build());
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_PHONE).build());
 
 		// Dirección
@@ -148,8 +201,8 @@ public class RestUsersConnector
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_COUNTRY).build());
 
 		// Clasificación académica
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SORT1).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SORT2).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_STATISTICS_1).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_STATISTICS_2).build());
 
 		// Expiración y categoría
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_EXPIRY_DATE).build());
@@ -525,16 +578,15 @@ public class RestUsersConnector
 		addIfPresent(builder, ATTR_USERID, user);
 		addIfPresent(builder, ATTR_SURNAME, user);
 		addIfPresent(builder, ATTR_FIRSTNAME, user);
-		addIfPresent(builder, ATTR_OTHERNAMES, user);
+		addIfPresent(builder, ATTR_OTHER_NAME, user);
 		addIfPresent(builder, ATTR_EMAIL, user);
-		addIfPresent(builder, ATTR_EMAILPRO, user);
 		addIfPresent(builder, ATTR_PHONE, user);
 		addIfPresent(builder, ATTR_CATEGORY_ID, user);
 		addIfPresent(builder, ATTR_EXPIRY_DATE, user);
-		addIfPresent(builder, ATTR_SEX, user);
-		addIfPresent(builder, ATTR_DATEOFBIRTH, user);
-		addIfPresent(builder, ATTR_SORT1, user);
-		addIfPresent(builder, ATTR_SORT2, user);
+		addIfPresent(builder, ATTR_GENDER, user);
+		addIfPresent(builder, ATTR_DATE_OF_BIRTH, user);
+		addIfPresent(builder, ATTR_STATISTICS_1, user);
+		addIfPresent(builder, ATTR_STATISTICS_2, user);
 		addIfPresent(builder, ATTR_ADDRESS, user);
 		addIfPresent(builder, ATTR_CITY, user);
 		addIfPresent(builder, ATTR_STATE, user);
