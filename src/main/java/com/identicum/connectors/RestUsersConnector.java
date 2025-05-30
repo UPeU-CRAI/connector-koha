@@ -158,23 +158,44 @@ public class RestUsersConnector
 
 	private JSONObject buildUserJson(Set<Attribute> attributes, Set<String> allowedAttrs) {
 		JSONObject jo = new JSONObject();
+
 		for (Attribute attr : attributes) {
 			String name = attr.getName();
-			if (allowedAttrs.contains(name)) {
-				jo.put(name, getStringAttr(attributes, name));
-				LOG.info("Procesado {0}: {1}", name, attr.getValue());
-			} else {
+
+			if (!allowedAttrs.contains(name)) {
 				LOG.warn("Atributo no permitido ignorado: {0}", name);
+				continue;
 			}
+
+			List<Object> values = attr.getValue();
+
+			// Manejo de valores nulos o vacíos
+			if (values == null || values.isEmpty()) {
+				LOG.info("Atributo {0} está vacío, se omite", name);
+				continue;
+			}
+
+			// Si el atributo tiene un solo valor, usar directamente
+			if (values.size() == 1) {
+				jo.put(name, values.get(0));
+			} else {
+				// Si tiene múltiples valores, agregar como arreglo JSON
+				jo.put(name, new JSONArray(values));
+			}
+
+			LOG.info("Procesado {0}: {1}", name, values);
 		}
+
 		return jo;
 	}
 
+	// 🔍 Utilidad: Extrae el valor de un atributo permitido para construir el JSON del usuario
 	@Override
 	protected String getStringAttr(Set<Attribute> attributes, String name) {
 		for (Attribute attr : attributes) {
-			if (attr.getName().equals(name) && attr.getValue() != null && !attr.getValue().isEmpty()) {
-				return attr.getValue().get(0).toString();
+			if (name.equals(attr.getName()) && attr.getValue() != null && !attr.getValue().isEmpty()) {
+				Object value = attr.getValue().get(0);
+				return value != null ? value.toString() : null;
 			}
 		}
 		return null;
@@ -207,12 +228,19 @@ public class RestUsersConnector
 		// Contacto
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_EMAIL).build());
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_PHONE).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_MOBILE).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SECONDARY_EMAIL).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SECONDARY_PHONE).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SMS_NUMBER).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SMS_PROVIDER_ID).build());
 
 		// Dirección
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ADDRESS).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ADDRESS2).build());
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_CITY).build());
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_STATE).build());
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ZIPCODE).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_POSTAL_CODE).build());
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_COUNTRY).build());
 
 		// Clasificación académica
@@ -222,6 +250,37 @@ public class RestUsersConnector
 		// Expiración y categoría
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_EXPIRY_DATE).build());
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_CATEGORY_ID).setRequired(true).build());
+
+		// Notas
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_OPAC_NOTES).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_STAFF_NOTES).build());
+
+		// Direcciones alternativas
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_ADDRESS).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_ADDRESS2).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_CITY).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_STATE).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_POSTAL_CODE).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_COUNTRY).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_PHONE).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_EMAIL).build());
+
+		// Contacto alternativo
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_FIRSTNAME).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_SURNAME).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_PHONE).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_ADDRESS).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_ADDRESS2).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_CITY).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_STATE).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_COUNTRY).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_POSTAL_CODE).build());
+
+		// Otros
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_PROTECTED).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ANONYMIZED).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_PRIVACY).build());
+		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_PATRON_CARD_LOST).build());
 
 		// UID y nombre (necesario para ConnId)
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(Name.NAME).setRequired(true).build());
@@ -237,6 +296,8 @@ public class RestUsersConnector
 		return schemaBuilder.build();
 	}
 
+
+
 	// ====================================
 	// 🔹 Operaciones CRUD (usuario Koha)
 	// ====================================
@@ -244,21 +305,24 @@ public class RestUsersConnector
 	public Uid create(ObjectClass objectClass, Set<Attribute> attributes, OperationOptions operationOptions) {
 		LOG.ok("Entering create with objectClass: {0}", objectClass);
 
+		// Solo soporta creación de cuentas de usuario
 		if (!ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
 			throw new ConnectorException("Unsupported object class: " + objectClass.getObjectClassValue());
 		}
 
-		// Usar la misma lista blanca que el update
-		Set<String> allowedAttrs = ALLOWED_USER_ATTRIBUTES;
+		// Validación de atributos obligatorios
+		validateRequiredAttributes(attributes, ATTR_USERID, ATTR_CARDNUMBER, ATTR_LIBRARY_ID);
 
-		JSONObject jo = buildUserJson(attributes, allowedAttrs);
-
+		// Construir JSON con los atributos permitidos
+		JSONObject jo = buildUserJson(attributes, ALLOWED_USER_ATTRIBUTES);
 		LOG.info("JSON to send to Koha: {0}", jo.toString());
 
+		// Construir y enviar la petición POST
 		String endpoint = getConfiguration().getServiceAddress() + PATRONS_ENDPOINT;
 		HttpEntityEnclosingRequestBase request = new HttpPost(endpoint);
 		JSONObject response = callRequest(request, jo);
 
+		// Obtener el UID del usuario creado desde la respuesta
 		String newUid = response.optString("patron_id",
 				response.optString("cardnumber",
 						response.optString("userid", null)
@@ -272,40 +336,55 @@ public class RestUsersConnector
 		LOG.info("Created Koha patron, UID: {0}", newUid);
 		return new Uid(newUid);
 	}
+	private void validateRequiredAttributes(Set<Attribute> attributes, String... requiredNames) {
+		for (String name : requiredNames) {
+			if (getStringAttr(attributes, name) == null) {
+				throw new ConnectorException("Missing required attribute: " + name);
+			}
+		}
+	}
+
 
 
 	@Override
 	public Uid update(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions) {
-		LOG.ok("Entering update with objectClass: {0}", objectClass);
+		LOG.ok("Entering update with objectClass: {0}, UID: {1}", objectClass, uid);
 
+		// Validar tipo de objeto
 		if (!ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
 			throw new ConnectorException("Unsupported object class: " + objectClass.getObjectClassValue());
 		}
 
-		JSONObject jo = buildUserJson(attributes, ALLOWED_USER_ATTRIBUTES);
+		// Validar que el UID esté presente
+		if (uid == null || uid.getUidValue() == null || uid.getUidValue().isEmpty()) {
+			throw new ConnectorException("UID is required for update operation.");
+		}
 
+		// Generar JSON con los atributos permitidos
+		JSONObject jo = buildUserJson(attributes, ALLOWED_USER_ATTRIBUTES);
 		LOG.info("JSON delta to send to Koha: {0}", jo.toString());
 
+		// Construir endpoint
 		String endpoint = getConfiguration().getServiceAddress() + PATRONS_ENDPOINT + "/" + uid.getUidValue();
 
 		try {
 			HttpEntityEnclosingRequestBase request = new HttpPatch(endpoint);
 			JSONObject response = callRequest(request, jo);
 
-			String newUid = response.optString("patron_id",
+			// Obtener UID actualizado desde la respuesta
+			String updatedUid = response.optString("patron_id",
 					response.optString("cardnumber",
 							response.optString("userid", uid.getUidValue())
 					)
 			);
 
-			LOG.info("Updated Koha patron, UID: {0}", newUid);
-			return new Uid(newUid);
+			LOG.info("Updated Koha patron, UID: {0}", updatedUid);
+			return new Uid(updatedUid);
 
 		} catch (Exception e) {
-			throw new ConnectorException("Error actualizando usuario en Koha", e);
+			throw new ConnectorException("Error actualizando usuario en Koha (UID: " + uid.getUidValue() + ")", e);
 		}
 	}
-
 
 
 
