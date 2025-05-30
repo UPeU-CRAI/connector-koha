@@ -27,17 +27,7 @@ import org.identityconnectors.framework.common.exceptions.OperationTimeoutExcept
 import org.identityconnectors.framework.common.exceptions.PermissionDeniedException;
 import org.identityconnectors.framework.common.exceptions.PreconditionFailedException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
-import org.identityconnectors.framework.common.objects.Attribute;
-import org.identityconnectors.framework.common.objects.AttributeInfoBuilder;
-import org.identityconnectors.framework.common.objects.ConnectorObject;
-import org.identityconnectors.framework.common.objects.ConnectorObjectBuilder;
-import org.identityconnectors.framework.common.objects.ObjectClass;
-import org.identityconnectors.framework.common.objects.ObjectClassInfoBuilder;
-import org.identityconnectors.framework.common.objects.OperationOptions;
-import org.identityconnectors.framework.common.objects.ResultsHandler;
-import org.identityconnectors.framework.common.objects.Schema;
-import org.identityconnectors.framework.common.objects.SchemaBuilder;
-import org.identityconnectors.framework.common.objects.Uid;
+import org.identityconnectors.framework.common.objects.*;
 import org.identityconnectors.framework.common.objects.filter.FilterTranslator;
 import org.identityconnectors.framework.spi.ConnectorClass;
 import org.identityconnectors.framework.spi.operations.CreateOp;
@@ -49,7 +39,6 @@ import org.identityconnectors.framework.spi.operations.UpdateAttributeValuesOp;
 import org.identityconnectors.framework.spi.operations.UpdateOp;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.identityconnectors.framework.common.objects.Name;
 import org.identityconnectors.common.security.GuardedString;
 
 
@@ -202,6 +191,16 @@ public class RestUsersConnector
 	}
 
 
+	// ====================================================
+	// Agrega todos los atributos permitidos en ALLOWED_USER_ATTRIBUTES al schema.
+	// ====================================================
+	private void addAllAllowedAttributes(ObjectClassInfoBuilder builder) {
+		for (String attr : ALLOWED_USER_ATTRIBUTES) {
+			builder.addAttributeInfo(new AttributeInfoBuilder(attr).build());
+		}
+	}
+
+
 
 	// ====================================================
 	// 🔹 Operaciones de búsqueda y definición de esquema
@@ -213,74 +212,8 @@ public class RestUsersConnector
 		ObjectClassInfoBuilder accountBuilder = new ObjectClassInfoBuilder();
 		accountBuilder.setType(ObjectClass.ACCOUNT_NAME);
 
-		// Identificadores obligatorios
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_USERID).setRequired(true).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_CARDNUMBER).setRequired(true).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_LIBRARY_ID).setRequired(true).build());
-
-		// Datos personales
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_FIRSTNAME).setRequired(true).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SURNAME).setRequired(true).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_OTHER_NAME).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_GENDER).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_DATE_OF_BIRTH).build());
-
-		// Contacto
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_EMAIL).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_PHONE).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_MOBILE).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SECONDARY_EMAIL).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SECONDARY_PHONE).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SMS_NUMBER).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_SMS_PROVIDER_ID).build());
-
-		// Dirección
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ADDRESS).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ADDRESS2).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_CITY).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_STATE).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ZIPCODE).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_POSTAL_CODE).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_COUNTRY).build());
-
-		// Clasificación académica
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_STATISTICS_1).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_STATISTICS_2).build());
-
-		// Expiración y categoría
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_EXPIRY_DATE).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_CATEGORY_ID).setRequired(true).build());
-
-		// Notas
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_OPAC_NOTES).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_STAFF_NOTES).build());
-
-		// Direcciones alternativas
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_ADDRESS).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_ADDRESS2).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_CITY).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_STATE).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_POSTAL_CODE).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_COUNTRY).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_PHONE).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTADDRESS_EMAIL).build());
-
-		// Contacto alternativo
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_FIRSTNAME).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_SURNAME).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_PHONE).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_ADDRESS).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_ADDRESS2).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_CITY).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_STATE).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_COUNTRY).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ALTCONTACT_POSTAL_CODE).build());
-
-		// Otros
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_PROTECTED).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_ANONYMIZED).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_PRIVACY).build());
-		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(ATTR_PATRON_CARD_LOST).build());
+		// Añadir todos los atributos definidos en ALLOWED_USER_ATTRIBUTES
+		addAllAllowedAttributes(accountBuilder);
 
 		// UID y nombre (necesario para ConnId)
 		accountBuilder.addAttributeInfo(new AttributeInfoBuilder(Name.NAME).setRequired(true).build());
@@ -345,95 +278,148 @@ public class RestUsersConnector
 	}
 
 
-
 	@Override
 	public Uid update(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions) {
-		LOG.ok("Entering update with objectClass: {0}, UID: {1}", objectClass, uid);
+		LOG.ok("Entering update with objectClass: {0}", objectClass);
 
-		// Validar tipo de objeto
+		// Validar que solo se actualicen cuentas de usuario
 		if (!ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
 			throw new ConnectorException("Unsupported object class: " + objectClass.getObjectClassValue());
 		}
 
-		// Validar que el UID esté presente
-		if (uid == null || uid.getUidValue() == null || uid.getUidValue().isEmpty()) {
-			throw new ConnectorException("UID is required for update operation.");
+		// Construcción del JSON con los atributos permitidos
+		JSONObject jo = buildUserJson(attributes, ALLOWED_USER_ATTRIBUTES);
+
+		// Agregar atributo Name si está presente (por compatibilidad ConnId)
+		Attribute nameAttr = AttributeUtil.find(Name.NAME, attributes);
+		if (nameAttr != null && nameAttr.getValue() != null && !nameAttr.getValue().isEmpty()) {
+			jo.put("name", nameAttr.getValue().get(0).toString());
 		}
 
-		// Generar JSON con los atributos permitidos
-		JSONObject jo = buildUserJson(attributes, ALLOWED_USER_ATTRIBUTES);
 		LOG.info("JSON delta to send to Koha: {0}", jo.toString());
 
-		// Construir endpoint
+		// Construir endpoint para actualizar usuario
 		String endpoint = getConfiguration().getServiceAddress() + PATRONS_ENDPOINT + "/" + uid.getUidValue();
 
 		try {
 			HttpEntityEnclosingRequestBase request = new HttpPatch(endpoint);
 			JSONObject response = callRequest(request, jo);
 
-			// Obtener UID actualizado desde la respuesta
-			String updatedUid = response.optString("patron_id",
+			// Extraer nuevo UID (por si Koha cambia el identificador)
+			String newUid = response.optString("patron_id",
 					response.optString("cardnumber",
 							response.optString("userid", uid.getUidValue())
 					)
 			);
 
-			LOG.info("Updated Koha patron, UID: {0}", updatedUid);
-			return new Uid(updatedUid);
+			if (newUid == null) {
+				LOG.error("No se pudo obtener un nuevo UID en la respuesta de Koha: {0}", response.toString());
+				throw new ConnectorException("No UID returned from Koha during update.");
+			}
+
+			LOG.info("Updated Koha patron, UID: {0}", newUid);
+			return new Uid(newUid);
 
 		} catch (Exception e) {
-			throw new ConnectorException("Error actualizando usuario en Koha (UID: " + uid.getUidValue() + ")", e);
+			LOG.error("Error actualizando usuario en Koha: {0}", e.getMessage());
+			throw new ConnectorException("Error actualizando usuario en Koha", e);
 		}
 	}
-
 
 
 	@Override
 	public Uid addAttributeValues(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions) {
-		LOG.ok("Entering addValue with objectClass: {0}", objectClass.toString());
+		LOG.ok("Entering addAttributeValues with objectClass: {0}", objectClass);
+
+		if (!ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
+			throw new ConnectorException("Unsupported object class: " + objectClass.getObjectClassValue());
+		}
+
 		try {
 			for (Attribute attribute : attributes) {
-				LOG.info("AddAttributeValue - Atributo recibido {0}: {1}", attribute.getName(), attribute.getValue());
-				if (ATTR_ROLES.equals(attribute.getName())) {
-					List<Object> addedRoles = attribute.getValue();
-					for (Object role : addedRoles) {
-						JSONObject json = new JSONObject();
-						json.put("id", role.toString());
+				String attrName = attribute.getName();
+				List<Object> values = attribute.getValue();
 
-						String endpoint = String.format("%s%s/%s/%s", getConfiguration().getServiceAddress(), PATRONS_ENDPOINT, uid.getUidValue(), ROLES_ENDPOINT);
-						LOG.info("Adding role {0} for user {1} on endpoint {2}", role, uid.getUidValue(), endpoint);
+				if (values == null || values.isEmpty()) {
+					LOG.warn("Attribute {0} has no values to add", attrName);
+					continue;
+				}
+
+				LOG.info("Processing add for attribute {0} with values: {1}", attrName, values);
+
+				if (ATTR_ROLES.equals(attrName)) {
+					for (Object role : values) {
+						JSONObject json = new JSONObject().put("id", role.toString());
+
+						String endpoint = String.format("%s%s/%s/%s",
+								getConfiguration().getServiceAddress(),
+								PATRONS_ENDPOINT,
+								uid.getUidValue(),
+								ROLES_ENDPOINT);
+
+						LOG.info("Adding role {0} for user {1} at endpoint: {2}", role, uid.getUidValue(), endpoint);
+
 						HttpEntityEnclosingRequestBase request = new HttpPost(endpoint);
-						callRequest(request, json);
+						callRequest(request, json);  // ⚠️ Manejo de posibles errores aquí
 					}
+				} else {
+					LOG.warn("Attribute {0} not supported for addAttributeValues", attrName);
 				}
 			}
-		} catch (Exception io) {
-			throw new RuntimeException("Error modificando usuario por rest", io);
+		} catch (Exception ex) {
+			throw new ConnectorException("Error adding attribute values for UID: " + uid.getUidValue(), ex);
 		}
+
 		return uid;
 	}
+
 
 	@Override
 	public Uid removeAttributeValues(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions) {
-		LOG.ok("Entering removeValue with objectClass: {0}", objectClass.toString());
+		LOG.ok("Entering removeAttributeValues with objectClass: {0}", objectClass);
+
+		if (!ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
+			throw new ConnectorException("Unsupported object class: " + objectClass.getObjectClassValue());
+		}
+
 		try {
 			for (Attribute attribute : attributes) {
-				LOG.info("RemoveAttributeValue - Atributo recibido {0}: {1}", attribute.getName(), attribute.getValue());
-				if (ATTR_ROLES.equals(attribute.getName())) {
-					List<Object> revokedRoles = attribute.getValue();
-					for (Object role : revokedRoles) {
-						String endpoint = String.format("%s/%s/%s/%s/%s", getConfiguration().getServiceAddress(), PATRONS_ENDPOINT, uid.getUidValue(), ROLES_ENDPOINT, role.toString());
-						LOG.info("Revoking role {0} for user {1} on endpoint {2}", role, uid.getUidValue(), endpoint);
+				String attrName = attribute.getName();
+				List<Object> values = attribute.getValue();
+
+				if (values == null || values.isEmpty()) {
+					LOG.warn("Attribute {0} has no values to remove", attrName);
+					continue;
+				}
+
+				LOG.info("Processing removal for attribute {0} with values: {1}", attrName, values);
+
+				if (ATTR_ROLES.equals(attrName)) {
+					for (Object role : values) {
+						String endpoint = String.format("%s%s/%s/%s/%s",
+								getConfiguration().getServiceAddress(),
+								PATRONS_ENDPOINT,
+								uid.getUidValue(),
+								ROLES_ENDPOINT,
+								role.toString());
+
+						LOG.info("Removing role {0} for user {1} at endpoint: {2}", role, uid.getUidValue(), endpoint);
+
 						HttpDelete request = new HttpDelete(endpoint);
 						callRequest(request);
 					}
+				} else {
+					LOG.warn("Attribute {0} not supported for removeAttributeValues", attrName);
 				}
 			}
-		} catch (Exception io) {
-			throw new RuntimeException("Error modificando usuario por rest", io);
+		} catch (Exception ex) {
+			throw new ConnectorException("Error removing attribute values for UID: " + uid.getUidValue(), ex);
 		}
+
 		return uid;
 	}
+
+
 
 	// ========================================
 	// 🔹 Utilitarios HTTP y helpers comunes
