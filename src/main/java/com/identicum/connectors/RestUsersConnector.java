@@ -8,13 +8,7 @@ import java.util.Base64;
 
 import org.apache.commons.codec.binary.StringUtils;
 import org.apache.http.HttpEntity;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPatch;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.client.methods.*;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.util.EntityUtils;
 import org.identityconnectors.common.StringUtil;
@@ -277,7 +271,6 @@ public class RestUsersConnector
 		}
 	}
 
-
 	@Override
 	public Uid update(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions) {
 		LOG.ok("Entering update with objectClass: {0}", objectClass);
@@ -287,13 +280,26 @@ public class RestUsersConnector
 			throw new ConnectorException("Unsupported object class: " + objectClass.getObjectClassValue());
 		}
 
+		// Validar atributos obligatorios (según Koha API)
+		validateRequiredAttributes(attributes, ATTR_SURNAME, ATTR_CARDNUMBER, ATTR_LIBRARY_ID);
+
 		// Construcción del JSON con los atributos permitidos
 		JSONObject jo = buildUserJson(attributes, ALLOWED_USER_ATTRIBUTES);
 
-		// Agregar atributo Name si está presente (por compatibilidad ConnId)
+		// Agregar patron_id explícitamente en el cuerpo (Koha lo requiere en PUT)
+		try {
+			int patronId = Integer.parseInt(uid.getUidValue());
+			jo.put("patron_id", patronId);
+		} catch (NumberFormatException e) {
+			LOG.error("UID no numérico para patron_id: {0}", uid.getUidValue());
+			throw new ConnectorException("UID no válido para patron_id en Koha: debe ser numérico", e);
+		}
+
+		// Agregar atributo Name si está presente (opcional, por compatibilidad ConnId)
 		Attribute nameAttr = AttributeUtil.find(Name.NAME, attributes);
 		if (nameAttr != null && nameAttr.getValue() != null && !nameAttr.getValue().isEmpty()) {
-			jo.put("name", nameAttr.getValue().get(0).toString());
+			String nameValue = nameAttr.getValue().get(0).toString();
+			jo.put("name", nameValue);  // Aunque Koha no lo use, MidPoint lo requiere
 		}
 
 		LOG.info("JSON delta to send to Koha: {0}", jo.toString());
@@ -302,7 +308,7 @@ public class RestUsersConnector
 		String endpoint = getConfiguration().getServiceAddress() + PATRONS_ENDPOINT + "/" + uid.getUidValue();
 
 		try {
-			HttpEntityEnclosingRequestBase request = new HttpPatch(endpoint);
+			HttpEntityEnclosingRequestBase request = new HttpPut(endpoint);
 			JSONObject response = callRequest(request, jo);
 
 			// Extraer nuevo UID (por si Koha cambia el identificador)
@@ -325,6 +331,7 @@ public class RestUsersConnector
 			throw new ConnectorException("Error actualizando usuario en Koha", e);
 		}
 	}
+
 
 
 	@Override
