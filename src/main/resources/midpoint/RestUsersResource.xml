@@ -1,15 +1,15 @@
-<resource xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
-		  xmlns:apti="http://midpoint.evolveum.com/xml/ns/public/common/api-types-3"
+<?xml version="1.0" encoding="UTF-8"?>
+<resource oid="2f7e91c8-1a85-4f5f-b0a9-1e2c3d4b5a60" xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
 		  xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
 		  xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3"
-		  xmlns:org="http://midpoint.evolveum.com/xml/ns/public/common/org-3"
-		  xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3"
 		  xmlns:ri="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3"
-		  xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3"
-		  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-		  oid="702ecc89-deba-4542-9618-5b9c8ba94abe" version="12">
+		  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+		  xmlns:icfc="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/connector-schema-3"
+		  xmlns:cfg="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/com.identicum.midpoint.rest-users-connector/com.identicum.connectors.RestUsersConnector"
+		  xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3"
+		  xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3">
 
-	<name>Rest Api</name>
+	<name>Koha REST Connector</name>
 
 	<connectorRef type="ConnectorType">
 		<filter>
@@ -19,326 +19,251 @@
 					<q:value>com.identicum.connectors.RestUsersConnector</q:value>
 				</q:equal>
 				<q:equal>
-					<q:path>connectorVersion</q:path>
-					<q:value>0.0.2-SNAPSHOT</q:value>
-				</q:equal>
+					<q:path>c:connectorVersion</q:path>
+					<q:value>0.0.2-SNAPSHOT</q:value> </q:equal>
 			</q:and>
 		</filter>
 	</connectorRef>
 
-	<connectorConfiguration xmlns:icfc="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/connector-schema-3">
-		<icfc:configurationProperties xmlns:cfg="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/com.identicum.midpoint.rest-users-connector/com.identicum.connectors.RestUsersConnector">
+	<connectorConfiguration>
+		<icfc:configurationProperties>
 			<cfg:trustAllCertificates>true</cfg:trustAllCertificates>
-			<cfg:serviceAddress>http://192.168.15.135:8000</cfg:serviceAddress>
-			<cfg:authMethod>BASIC</cfg:authMethod>
+			<cfg:serviceAddress>http://192.168.15.135:8000</cfg:serviceAddress> <cfg:authMethod>BASIC</cfg:authMethod>
 			<cfg:username>superadmin</cfg:username>
 			<cfg:password>
-				<t:clearValue>CR41$2022</t:clearValue>
-			</cfg:password>
+				<t:clearValue>CR41$2022</t:clearValue> </cfg:password>
 		</icfc:configurationProperties>
 	</connectorConfiguration>
+
 	<schema>
 		<definition>
-			<xsd:schema xmlns:a="http://prism.evolveum.com/xml/ns/public/annotation-3"
-						xmlns:ra="http://midpoint.evolveum.com/xml/ns/public/resource/annotation-3"
-						xmlns:tns="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3"
+			<xsd:schema elementFormDefault="qualified"
+						targetNamespace="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3"
 						xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-						elementFormDefault="qualified"
-						targetNamespace="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3">
+						xmlns:tns="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3"
+						xmlns:a="http://prism.evolveum.com/xml/ns/public/annotation-3"
+						xmlns:ra="http://midpoint.evolveum.com/xml/ns/public/resource/annotation-3"
+						xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3">
+				<xsd:import namespace="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3"/>
+				<xsd:import namespace="http://prism.evolveum.com/xml/ns/public/annotation-3"/>
+				<xsd:import namespace="http://midpoint.evolveum.com/xml/ns/public/resource/annotation-3"/>
 
-				<xsd:import namespace="http://prism.evolveum.com/xml/ns/public/annotation-3" />
-				<xsd:import namespace="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3" />
-				<xsd:import namespace="http://midpoint.evolveum.com/xml/ns/public/resource/annotation-3" />
+				<xsd:complexType name="AccountObjectClass">
+					<xsd:annotation>
+						<xsd:appinfo>
+							<ra:resourceObject/>
+							<ra:identifier>icfs:uid</ra:identifier> <ra:secondaryIdentifier>icfs:name</ra:secondaryIdentifier> <ra:displayNameAttribute>ri:surname</ra:displayNameAttribute>
+							<ra:namingAttribute>icfs:name</ra:namingAttribute>
+							<ra:nativeObjectClass>__ACCOUNT__</ra:nativeObjectClass>
+							<ra:account/>
+							<ra:default/>
+						</xsd:appinfo>
+					</xsd:annotation>
+					<xsd:sequence>
+						<xsd:element ref="icfs:uid"/>    <xsd:element ref="icfs:name"/>   <xsd:element name="cardnumber" type="xsd:string" minOccurs="0"/>
+						<xsd:element name="surname" type="xsd:string" minOccurs="0"/>
+						<xsd:element name="firstname" type="xsd:string" minOccurs="0"/>
+						<xsd:element name="email" type="xsd:string" minOccurs="0"/>
+						<xsd:element name="phone" type="xsd:string" minOccurs="0"/>
+						<xsd:element name="library_id" type="xsd:string" minOccurs="0"/>
+						<xsd:element name="category_id" type="xsd:string" minOccurs="0"/>
+						<xsd:element name="date_of_birth" type="xsd:string" minOccurs="0"/>
+						<xsd:element name="expiry_date" type="xsd:string" minOccurs="0"/>
+						<xsd:element name="restricted" type="xsd:boolean" minOccurs="0"/>
+						<xsd:element name="date_enrolled" type="xsd:string" minOccurs="0"/>
+						<xsd:element name="expired" type="xsd:boolean" minOccurs="0"/>
+						<xsd:element name="updated_on" type="xsd:string" minOccurs="0"/>
+					</xsd:sequence>
+				</xsd:complexType>
 
 				<xsd:complexType name="GroupObjectClass">
 					<xsd:annotation>
 						<xsd:appinfo>
-							<ra:resourceObject />
-							<ra:identifier>icfs:uid</ra:identifier>
-							<ra:secondaryIdentifier>icfs:name</ra:secondaryIdentifier>
-							<ra:displayNameAttribute>icfs:name</ra:displayNameAttribute>
+							<ra:resourceObject/>
+							<ra:identifier>icfs:uid</ra:identifier> <ra:secondaryIdentifier>icfs:name</ra:secondaryIdentifier> <ra:displayNameAttribute>icfs:name</ra:displayNameAttribute>
 							<ra:namingAttribute>icfs:name</ra:namingAttribute>
 							<ra:nativeObjectClass>__GROUP__</ra:nativeObjectClass>
 						</xsd:appinfo>
 					</xsd:annotation>
 					<xsd:sequence>
-						<xsd:element ref="icfs:name" />
-						<xsd:element minOccurs="0" ref="icfs:uid" />
-					</xsd:sequence>
-				</xsd:complexType>
-
-				<xsd:complexType name="AccountObjectClass">
-					<xsd:annotation>
-						<xsd:appinfo>
-							<ra:resourceObject />
-							<ra:identifier>icfs:uid</ra:identifier>
-							<ra:secondaryIdentifier>icfs:name</ra:secondaryIdentifier>
-							<ra:displayNameAttribute>icfs:name</ra:displayNameAttribute>
-							<ra:namingAttribute>icfs:name</ra:namingAttribute>
-							<ra:nativeObjectClass>__ACCOUNT__</ra:nativeObjectClass>
-						</xsd:appinfo>
-					</xsd:annotation>
-					<xsd:sequence>
-						<xsd:element minOccurs="0" ref="icfs:uid" />
-						<xsd:element ref="icfs:name" />
-						<xsd:element name="username" type="xsd:string" />
-						<xsd:element name="firstName" type="xsd:string" />
-						<xsd:element name="lastName" type="xsd:string" />
-						<xsd:element name="email" type="xsd:string" minOccurs="0" />
-						<xsd:element name="cardnumber" type="xsd:string" minOccurs="0" />
-						<xsd:element name="categorycode" type="xsd:string" minOccurs="0" />
-						<xsd:element name="branchcode" type="xsd:string" minOccurs="0" />
-						<xsd:element name="address" type="xsd:string" minOccurs="0" />
-						<xsd:element name="city" type="xsd:string" minOccurs="0" />
-						<xsd:element name="phone" type="xsd:string" minOccurs="0" />
-						<xsd:element name="roles" type="xsd:string" minOccurs="0" maxOccurs="unbounded" />
-						<xsd:element name="altcontactfirstname" type="xsd:string" minOccurs="0"/>
-						<xsd:element name="altcontactlastname" type="xsd:string" minOccurs="0"/>
-						<xsd:element name="altcontactaddress1" type="xsd:string" minOccurs="0"/>
-						<xsd:element name="altcontactaddress2" type="xsd:string" minOccurs="0"/>
-						<xsd:element name="altcontactaddress3" type="xsd:string" minOccurs="0"/>
-						<xsd:element name="altcontactstate" type="xsd:string" minOccurs="0"/>
-						<xsd:element name="altcontactzipcode" type="xsd:string" minOccurs="0"/>
-						<xsd:element name="altcontactcountry" type="xsd:string" minOccurs="0"/>
-						<xsd:element name="privacy" type="xsd:string" minOccurs="0"/>
-						<xsd:element name="anonymized" type="xsd:boolean" minOccurs="0"/>
-
-					</xsd:sequence>
+						<xsd:element ref="icfs:uid"/>    <xsd:element ref="icfs:name"/>   <xsd:element name="category_type" type="xsd:string" minOccurs="0"/>
+						<xsd:element name="enrolment_period" type="xsd:string" minOccurs="0"/> </xsd:sequence>
 				</xsd:complexType>
 			</xsd:schema>
 		</definition>
 	</schema>
+
 	<schemaHandling>
 		<objectType>
-			<displayName>Default account</displayName>
 			<kind>account</kind>
+			<intent>default</intent>
+			<displayName>Koha Patron Account</displayName>
+			<objectClass>tns:AccountObjectClass</objectClass>
 			<default>true</default>
-			<objectClass>ri:AccountObjectClass</objectClass>
 
 			<attribute>
-				<ref>icfs:name</ref>
-				<outbound>
-					<source><path>$user/name</path></source>
-				</outbound>
+				<ref>icfs:name</ref> <displayName>User ID (Login)</displayName>
+				<outbound><source><path>$user/name</path></source></outbound>
+				<inbound><target><path>$user/name</path></target></inbound>
 			</attribute>
 			<attribute>
-				<ref>ri:username</ref>
-				<outbound>
-					<source><path>$user/name</path></source>
-				</outbound>
+				<ref>tns:surname</ref>
+				<outbound><source><path>$user/familyName</path></source></outbound>
+				<inbound><target><path>$user/familyName</path></target></inbound>
 			</attribute>
 			<attribute>
-				<ref>ri:firstName</ref>
-				<outbound>
-					<source><path>$user/givenName</path></source>
-				</outbound>
+				<ref>tns:firstname</ref>
+				<outbound><source><path>$user/givenName</path></source></outbound>
+				<inbound><target><path>$user/givenName</path></target></inbound>
 			</attribute>
 			<attribute>
-				<ref>ri:lastName</ref>
-				<outbound>
-					<source><path>$user/familyName</path></source>
-				</outbound>
+				<ref>tns:email</ref>
+				<outbound><source><path>$user/emailAddress</path></source></outbound>
+				<inbound><target><path>$user/emailAddress</path></target></inbound>
 			</attribute>
 			<attribute>
-				<ref>ri:email</ref>
-				<outbound>
-					<source><path>$user/emailAddress</path></source>
-				</outbound>
+				<ref>tns:category_id</ref>
+				<displayName>Koha Patron Category ID</displayName>
+				<outbound><source><path>$user/extension/kohaCategoryId</path></source></outbound>
+				<inbound><target><path>$user/extension/kohaCategoryId</path></target></inbound>
+			</attribute>
+			<attribute> <ref>tns:cardnumber</ref>
+				<inbound/>
 			</attribute>
 			<attribute>
-				<ref>ri:cardnumber</ref>
-				<outbound>
-					<source><path>$user/employeeNumber</path></source>
-				</outbound>
-			</attribute>
-			<attribute>
-				<ref>ri:categorycode</ref>
-				<outbound>
-					<source><path>$user/title</path></source>
-				</outbound>
-			</attribute>
-			<attribute>
-				<ref>ri:branchcode</ref>
-				<outbound>
-					<source><path>$user/organizationalUnit</path></source>
-				</outbound>
-			</attribute>
-			<attribute>
-				<ref>ri:address</ref>
-				<outbound>
-					<source><path>$user/address</path></source>
-				</outbound>
-			</attribute>
-			<attribute>
-				<ref>ri:city</ref>
-				<outbound>
-					<source><path>$user/locality</path></source>
-				</outbound>
-			</attribute>
-			<attribute>
-				<ref>ri:phone</ref>
-				<outbound>
-					<source><path>$user/telephoneNumber</path></source>
-				</outbound>
-			</attribute>
-			<attribute>
-				<ref>ri:roles</ref>
-			</attribute>
-			<attribute>
-				<ref>ri:altcontactfirstname</ref>
-			</attribute>
-			<attribute>
-				<ref>ri:altcontactlastname</ref>
-			</attribute>
-			<attribute>
-				<ref>ri:altcontactaddress1</ref>
-			</attribute>
-			<attribute>
-				<ref>ri:altcontactaddress2</ref>
-			</attribute>
-			<attribute>
-				<ref>ri:altcontactaddress3</ref>
-			</attribute>
-			<attribute>
-				<ref>ri:altcontactstate</ref>
-			</attribute>
-			<attribute>
-				<ref>ri:altcontactzipcode</ref>
-			</attribute>
-			<attribute>
-				<ref>ri:altcontactcountry</ref>
-			</attribute>
-			<attribute>
-				<ref>ri:privacy</ref>
-			</attribute>
-			<attribute>
-				<ref>ri:anonymized</ref>
+				<ref>tns:library_id</ref>
+				<outbound><expression><value>TU_LIBRARY_ID_POR_DEFECTO</value></expression></outbound>
 			</attribute>
 
 
-			<association>
-				<ref>ri:GroupObjectClass</ref>
-				<kind>entitlement</kind>
-				<intent>group</intent>
-				<direction>subjectToObject</direction>
-				<associationAttribute>ri:roles</associationAttribute>
-				<valueAttribute>icfs:uid</valueAttribute>
-			</association>
+			<activation>
+				<administrativeStatus>
+					<outbound/>
+					<inbound>
+						<strength>weak</strength> <expression> <script>
+						<code>shadow?.attributes?.restricted == true ? false : true</code>
+					</script>
+					</expression>
+					</inbound>
+					<mapping>
+						<condition><script><code>input == false</code></script></condition>
+						<expression><value>false</value></expression> </mapping>
+					<mapping>
+						<condition><script><code>input == true</code></script></condition>
+						<expression><value>true</value></expression> </mapping>
+					<attribute>ri:restricted</attribute>
+				</administrativeStatus>
+				<validityStatus> <inbound>
+					<strength>weak</strength>
+					<expression>
+						<script>
+							<code>import java.time.LocalDate;
+							expiryDateStr = shadow?.attributes?.expiry_date;
+							if (expiryDateStr == null) return null; // o Validity.VALID si prefieres
+							try {
+								expiryDate = LocalDate.parse(expiryDateStr);
+								return expiryDate.isBefore(LocalDate.now()) ? Validity.INVALID : Validity.VALID;
+							} catch (Exception e) { return null; }
+							</code>
+						</script>
+					</expression>
+				</inbound>
+				</validityStatus>
+			</activation>
+
 		</objectType>
 
 		<objectType>
-			<displayName>Default entitlement</displayName>
 			<kind>entitlement</kind>
 			<intent>group</intent>
+			<displayName>Koha Patron Category</displayName>
+			<objectClass>tns:GroupObjectClass</objectClass>
 			<default>true</default>
-			<objectClass>ri:GroupObjectClass</objectClass>
+
 			<attribute>
-				<ref>icfs:name</ref>
-				<outbound>
-					<source><path>$input/identifier</path></source>
-				</outbound>
+				<ref>icfs:name</ref> <displayName>Category Description</displayName>
+				<outbound><strength>strong</strength></outbound>
+				<inbound><target><path>name</path></target></inbound>
+			</attribute>
+			<attribute>
+				<ref>tns:category_type</ref>
+				<inbound><target><path>extension/kohaCategoryType</path></target></inbound>
 			</attribute>
 		</objectType>
 	</schemaHandling>
+
 	<capabilities>
-		<native xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3"
-				xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-				xsi:type="cap:CapabilityCollectionType">
-			<cap:schema/>
-			<cap:testConnection/>
-			<cap:create/>
-			<cap:read/>
-			<cap:update/>
-			<cap:delete/>
-			<cap:script>
-				<cap:host>
-					<cap:type>connector</cap:type>
-				</cap:host>
-			</cap:script>
-			<cap:addRemoveAttributeValues/>
-		</native>
+		<configured>
+			<cap:schema xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3"/>
+			<cap:testConnection xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3"/>
+			<cap:create xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3"/>
+			<cap:read xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3"/>
+			<cap:update xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3"/>
+			<cap:delete xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3"/>
+			<cap:activation xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3"/>
+		</configured>
 	</capabilities>
 
 	<synchronization>
 		<objectSynchronization>
-			<name>User</name>
-			<objectClass>ri:AccountObjectClass</objectClass>
+			<name>Patron Synchronization</name>
+			<objectClass>tns:AccountObjectClass</objectClass>
 			<kind>account</kind>
+			<intent>default</intent>
 			<focusType>c:UserType</focusType>
 			<enabled>true</enabled>
 			<correlation>
 				<q:equal>
 					<q:path>c:name</q:path>
 					<expression>
-						<path>declare namespace icfs='http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3'; $account/attributes/icfs:name</path>
-					</expression>
+						<path>$account/attributes/icfs:name</path> </expression>
 				</q:equal>
 			</correlation>
-			<reconcile>false</reconcile>
 			<reaction>
-				<situation>linked</situation>
-				<synchronize>true</synchronize>
-				<action>
-					<handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#modifyUser</handlerUri>
-				</action>
+				<situation>linked</situation><synchronize>true</synchronize><action ref="ኘnormalize"/><action ref="ኘreconcile"/>
 			</reaction>
 			<reaction>
-				<situation>deleted</situation>
-				<synchronize>true</synchronize>
-				<action>
-					<handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#inactivateFocus</handlerUri>
-				</action>
+				<situation>deleted</situation><synchronize>true</synchronize>
+				<action><handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#unlinkAccount</handlerUri></action>
 			</reaction>
 			<reaction>
-				<situation>unlinked</situation>
-				<synchronize>true</synchronize>
-				<action>
-					<handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#linkAccount</handlerUri>
-				</action>
+				<situation>unlinked</situation><synchronize>true</synchronize>
+				<action><handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#linkAccount</handlerUri></action>
 			</reaction>
 			<reaction>
-				<situation>unmatched</situation>
-				<synchronize>true</synchronize>
-				<action>
-					<handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#addUser</handlerUri>
-				</action>
+				<situation>unmatched</situation><synchronize>true</synchronize>
+				<action><handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#addUser</handlerUri></action>
 			</reaction>
 		</objectSynchronization>
 
 		<objectSynchronization>
-			<name>Group sync</name>
-			<objectClass>ri:GroupObjectClass</objectClass>
+			<name>Patron Category Synchronization</name>
+			<objectClass>tns:GroupObjectClass</objectClass>
 			<kind>entitlement</kind>
 			<intent>group</intent>
 			<focusType>c:RoleType</focusType>
 			<enabled>true</enabled>
 			<correlation>
-				<q:equal>
-					<q:path>c:identifier</q:path>
+				<q:equal> <q:path>c:name</q:path>
 					<expression>
-						<path>$shadow/attributes/name</path>
+						<path>$shadow/attributes/icfs:name</path>
 					</expression>
 				</q:equal>
 			</correlation>
-			<reconcile>false</reconcile>
 			<reaction>
-				<situation>linked</situation>
-				<synchronize>true</synchronize>
+				<situation>linked</situation><synchronize>true</synchronize><action ref="ኘreconcile"/>
 			</reaction>
 			<reaction>
-				<situation>deleted</situation>
-				<action>
-					<handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#unlink</handlerUri>
-				</action>
+				<situation>deleted</situation><synchronize>true</synchronize>
+				<action><handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#deleteFocus</handlerUri></action>
 			</reaction>
 			<reaction>
-				<situation>unlinked</situation>
-				<action>
-					<handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#link</handlerUri>
-				</action>
+				<situation>unlinked</situation><synchronize>true</synchronize>
+				<action><handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#link</handlerUri></action>
 			</reaction>
 			<reaction>
-				<situation>unmatched</situation>
+				<situation>unmatched</situation><synchronize>true</synchronize>
+				<action><handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#addFocus</handlerUri></action>
 			</reaction>
 		</objectSynchronization>
 	</synchronization>

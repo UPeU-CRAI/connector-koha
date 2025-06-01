@@ -3,14 +3,11 @@ package com.identicum.connectors;
 import com.evolveum.polygon.rest.AbstractRestConnector;
 import org.apache.commons.codec.binary.StringUtils;
 import org.apache.http.HttpEntity;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.*;
 import org.apache.http.entity.ByteArrayEntity;
+import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.logging.Log;
@@ -30,11 +27,14 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
@@ -42,6 +42,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+// Los imports para PagedResultsCookie y PagedResultsHandler han sido eliminados
 
 @ConnectorClass(displayNameKey = "connector.identicum.rest.display", configurationClass = RestUsersConfiguration.class)
 public class RestUsersConnector
@@ -50,15 +51,13 @@ public class RestUsersConnector
 
 	private static final Log LOG = Log.getLog(RestUsersConnector.class);
 
-	//region Constantes de API y Endpoints
 	private static final String API_BASE_PATH = "/api/v1";
 	private static final String PATRONS_ENDPOINT_SUFFIX = "/patrons";
 	private static final String CATEGORIES_ENDPOINT_SUFFIX = "/patron_categories";
-	//endregion
+	private static final String KOHA_OAUTH_TOKEN_ENDPOINT_SUFFIX = "/api/v1/oauth/token";
 
-	//region Nombres de Atributos de Koha y ConnId
 	public static final String KOHA_PATRON_ID_NATIVE_NAME = "patron_id";
-	public static final String KOHA_CATEGORY_ID_NATIVE_NAME = "patron_category_id"; // ¡CONFIRMAR: o "categorycode"?
+	public static final String KOHA_CATEGORY_ID_NATIVE_NAME = "patron_category_id"; // ¡CONFIRMAR!
 
 	public static final String ATTR_USERID = "userid";
 	public static final String ATTR_CARDNUMBER = "cardnumber";
@@ -92,24 +91,18 @@ public class RestUsersConnector
 	public static final String ATTR_UPDATED_ON = "updated_on";
 	public static final String ATTR_LAST_SEEN = "last_seen";
 
-	public static final String ATTR_CATEGORY_DESCRIPTION = "description"; // ¡CONFIRMAR: __NAME__ para __GROUP__?
+	public static final String ATTR_CATEGORY_DESCRIPTION = "description"; // ¡CONFIRMAR!
 	public static final String ATTR_CATEGORY_TYPE = "category_type";
 	public static final String ATTR_CATEGORY_ENROLMENT_PERIOD = "enrolment_period";
-	//endregion
 
-	//region Formateadores de Fecha/Hora
 	private static final DateTimeFormatter KOHA_DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
 	private static final DateTimeFormatter KOHA_DATETIME_FORMATTER = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
-	//endregion
 
 	private volatile Schema connectorSchema = null;
+	private String oauthAccessToken = null;
 
-	//region Definición de Metadatos de Atributos
 	private static class AttributeMetadata {
-		final String connIdName;
-		final String kohaNativeName;
-		final Class<?> type;
-		final Set<Flags> flags;
+		final String connIdName; final String kohaNativeName; final Class<?> type; final Set<Flags> flags;
 		enum Flags {REQUIRED, NOT_CREATABLE, NOT_UPDATEABLE, NOT_READABLE, MULTIVALUED}
 		AttributeMetadata(String connIdName, String kohaNativeName, Class<?> type, Flags... flags) {
 			this.connIdName = connIdName; this.kohaNativeName = kohaNativeName; this.type = type;
@@ -151,7 +144,6 @@ public class RestUsersConnector
 		KOHA_PATRON_ATTRIBUTE_METADATA.put(ATTR_UPDATED_ON, new AttributeMetadata(ATTR_UPDATED_ON, "updated_on", String.class, AttributeMetadata.Flags.NOT_CREATABLE, AttributeMetadata.Flags.NOT_UPDATEABLE));
 		KOHA_PATRON_ATTRIBUTE_METADATA.put(ATTR_LAST_SEEN, new AttributeMetadata(ATTR_LAST_SEEN, "last_seen", String.class, AttributeMetadata.Flags.NOT_CREATABLE, AttributeMetadata.Flags.NOT_UPDATEABLE));
 	}
-
 	private static final Set<String> MANAGED_KOHA_PATRON_CONNID_NAMES = Collections.unmodifiableSet(new HashSet<>(Set.of(
 			ATTR_USERID, ATTR_CARDNUMBER, ATTR_SURNAME, ATTR_FIRSTNAME, ATTR_EMAIL, ATTR_PHONE,
 			ATTR_LIBRARY_ID, ATTR_CATEGORY_ID, ATTR_DATE_OF_BIRTH, ATTR_EXPIRY_DATE,
@@ -160,7 +152,6 @@ public class RestUsersConnector
 			ATTR_INCORRECT_ADDRESS, ATTR_PATRON_CARD_LOST, ATTR_RESTRICTED, ATTR_AUTORENEW_CHECKOUTS,
 			ATTR_PROTECTED
 	)));
-
 	private static final Map<String, AttributeMetadata> KOHA_CATEGORY_ATTRIBUTE_METADATA = new HashMap<>();
 	static {
 		KOHA_CATEGORY_ATTRIBUTE_METADATA.put(ATTR_CATEGORY_DESCRIPTION, new AttributeMetadata(ATTR_CATEGORY_DESCRIPTION, "description", String.class, AttributeMetadata.Flags.REQUIRED));
@@ -170,224 +161,212 @@ public class RestUsersConnector
 	private static final Set<String> MANAGED_KOHA_CATEGORY_CONNID_NAMES = Collections.unmodifiableSet(new HashSet<>(Set.of(
 			ATTR_CATEGORY_DESCRIPTION, ATTR_CATEGORY_TYPE, ATTR_CATEGORY_ENROLMENT_PERIOD
 	)));
-	//endregion
+
+	@Override
+	public void init(org.identityconnectors.framework.spi.Configuration configuration) {
+		super.init(configuration);
+		this.oauthAccessToken = null;
+		RestUsersConfiguration currentConfig = getConfiguration();
+		if (currentConfig == null) {
+			throw new ConfigurationException("Connector configuration is null after super.init()");
+		}
+		LOG.ok("Koha Connector initialized. ServiceAddress: {0}, AuthMethod: {1}", currentConfig.getServiceAddress(), currentConfig.getAuthMethod());
+		if (StringUtil.isNotBlank(currentConfig.getClientId())) {
+			if (StringUtil.isBlank(currentConfig.getServiceAddress())) {
+				throw new ConfigurationException("Service Address (URL Base) must be configured when Client ID is present for OAuth2.");
+			}
+			if (currentConfig.getClientSecret() == null) {
+				throw new ConfigurationException("Client Secret must be configured when Client ID is present for OAuth2.");
+			}
+		}
+	}
 
 	@Override
 	public Schema schema() {
-		if (this.connectorSchema != null) {
-			return this.connectorSchema;
-		}
+		if (this.connectorSchema != null) return this.connectorSchema;
 		LOG.ok("Building schema for Koha Connector");
 		SchemaBuilder schemaBuilder = new SchemaBuilder(RestUsersConnector.class);
-
-		// --- ObjectClass __ACCOUNT__ (Patrons) ---
 		ObjectClassInfoBuilder accountBuilder = new ObjectClassInfoBuilder();
 		accountBuilder.setType(ObjectClass.ACCOUNT_NAME);
 		Set<String> accountAttrsDefined = new HashSet<>();
-
-		accountBuilder.addAttributeInfo(
-				AttributeInfoBuilder.define(Uid.NAME)
-						.setNativeName(KOHA_PATRON_ID_NATIVE_NAME)
-						.setType(String.class)
-						.setRequired(true).setCreateable(false).setUpdateable(false).setReadable(true)
-						.build());
+		accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(Uid.NAME).setNativeName(KOHA_PATRON_ID_NATIVE_NAME).setType(String.class).setRequired(true).setCreateable(false).setUpdateable(false).setReadable(true).build());
 		accountAttrsDefined.add(Uid.NAME);
-
 		AttributeMetadata nameAttrMeta = KOHA_PATRON_ATTRIBUTE_METADATA.get(ATTR_USERID);
 		if (nameAttrMeta != null) {
-			accountBuilder.addAttributeInfo(
-					AttributeInfoBuilder.define(Name.NAME)
-							.setNativeName(nameAttrMeta.kohaNativeName)
-							.setType(nameAttrMeta.type)
-							.setRequired(true)
-							.setCreateable(!nameAttrMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE))
-							.setUpdateable(!nameAttrMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
-							.setReadable(!nameAttrMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE))
-							.build());
+			accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(Name.NAME).setNativeName(nameAttrMeta.kohaNativeName).setType(nameAttrMeta.type).setRequired(true)
+					.setCreateable(!nameAttrMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!nameAttrMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
+					.setReadable(!nameAttrMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
 			accountAttrsDefined.add(Name.NAME);
 		}
-
 		for (String connIdAttrName : MANAGED_KOHA_PATRON_CONNID_NAMES) {
-			if (accountAttrsDefined.contains(connIdAttrName)) {
-				continue;
-			}
+			if (accountAttrsDefined.contains(connIdAttrName)) continue;
 			AttributeMetadata meta = KOHA_PATRON_ATTRIBUTE_METADATA.get(connIdAttrName);
 			if (meta != null) {
-				AttributeInfoBuilder attrBuilder = AttributeInfoBuilder.define(meta.connIdName)
-						.setNativeName(meta.kohaNativeName)
-						.setType(meta.type)
-						.setRequired(meta.flags.contains(AttributeMetadata.Flags.REQUIRED))
-						.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
-						.setCreateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE))
-						.setUpdateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
-						.setReadable(!meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE));
-				accountBuilder.addAttributeInfo(attrBuilder.build());
+				accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(meta.connIdName).setNativeName(meta.kohaNativeName).setType(meta.type)
+						.setRequired(meta.flags.contains(AttributeMetadata.Flags.REQUIRED)).setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
+						.setCreateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
+						.setReadable(!meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
 				accountAttrsDefined.add(meta.connIdName);
-			} else {
-				LOG.warn("Schema: Metadata not found for managed patron attribute '{0}'. Skipping.", connIdAttrName);
-			}
+			} else { LOG.warn("Schema: Metadata not found for managed patron attribute '{0}'. Skipping.", connIdAttrName); }
 		}
-
 		KOHA_PATRON_ATTRIBUTE_METADATA.forEach((connIdName, meta) -> {
-			if (!accountAttrsDefined.contains(connIdName)) {
-				if (meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE) && meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)) {
-					AttributeInfoBuilder attrBuilder = AttributeInfoBuilder.define(meta.connIdName)
-							.setNativeName(meta.kohaNativeName)
-							.setType(meta.type)
-							.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
-							.setCreateable(false).setUpdateable(false).setReadable(true);
-					accountBuilder.addAttributeInfo(attrBuilder.build());
-					accountAttrsDefined.add(meta.connIdName);
-				}
+			if (!accountAttrsDefined.contains(connIdName) && meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE) && meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)) {
+				accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(meta.connIdName).setNativeName(meta.kohaNativeName).setType(meta.type)
+						.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED)).setCreateable(false).setUpdateable(false).setReadable(true).build());
+				accountAttrsDefined.add(meta.connIdName);
 			}
 		});
 		schemaBuilder.defineObjectClass(accountBuilder.build());
-
-		// --- ObjectClass __GROUP__ (Patron Categories) ---
 		ObjectClassInfoBuilder groupBuilder = new ObjectClassInfoBuilder();
 		groupBuilder.setType(ObjectClass.GROUP_NAME);
 		Set<String> groupAttrsDefined = new HashSet<>();
-
-		groupBuilder.addAttributeInfo(
-				AttributeInfoBuilder.define(Uid.NAME)
-						.setNativeName(KOHA_CATEGORY_ID_NATIVE_NAME)
-						.setType(String.class)
-						.setRequired(true).setCreateable(false).setUpdateable(false).setReadable(true)
-						.build());
+		groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(Uid.NAME).setNativeName(KOHA_CATEGORY_ID_NATIVE_NAME).setType(String.class).setRequired(true).setCreateable(false).setUpdateable(false).setReadable(true).build());
 		groupAttrsDefined.add(Uid.NAME);
-
 		AttributeMetadata groupNameMeta = KOHA_CATEGORY_ATTRIBUTE_METADATA.get(ATTR_CATEGORY_DESCRIPTION);
 		if (groupNameMeta != null) {
-			groupBuilder.addAttributeInfo(
-					AttributeInfoBuilder.define(Name.NAME)
-							.setNativeName(groupNameMeta.kohaNativeName)
-							.setType(groupNameMeta.type)
-							.setRequired(true)
-							.setCreateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE))
-							.setUpdateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
-							.setReadable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE))
-							.build());
+			groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(Name.NAME).setNativeName(groupNameMeta.kohaNativeName).setType(groupNameMeta.type).setRequired(true)
+					.setCreateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
+					.setReadable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
 			groupAttrsDefined.add(Name.NAME);
 		}
-
 		for (String connIdAttrName : MANAGED_KOHA_CATEGORY_CONNID_NAMES) {
-			if (groupAttrsDefined.contains(connIdAttrName)) {
-				continue;
-			}
+			if (groupAttrsDefined.contains(connIdAttrName)) continue;
 			AttributeMetadata meta = KOHA_CATEGORY_ATTRIBUTE_METADATA.get(connIdAttrName);
 			if (meta != null) {
-				AttributeInfoBuilder attrBuilder = AttributeInfoBuilder.define(meta.connIdName)
-						.setNativeName(meta.kohaNativeName)
-						.setType(meta.type)
-						.setRequired(meta.flags.contains(AttributeMetadata.Flags.REQUIRED))
-						.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
-						.setCreateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE))
-						.setUpdateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
-						.setReadable(!meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE));
-				groupBuilder.addAttributeInfo(attrBuilder.build());
+				groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(meta.connIdName).setNativeName(meta.kohaNativeName).setType(meta.type)
+						.setRequired(meta.flags.contains(AttributeMetadata.Flags.REQUIRED)).setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
+						.setCreateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
+						.setReadable(!meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
 				groupAttrsDefined.add(meta.connIdName);
-			} else {
-				LOG.warn("Schema: Metadata not found for managed category attribute '{0}'. Skipping.", connIdAttrName);
-			}
+			} else { LOG.warn("Schema: Metadata not found for managed category attribute '{0}'. Skipping.", connIdAttrName); }
 		}
-
 		KOHA_CATEGORY_ATTRIBUTE_METADATA.forEach((connIdName, meta) -> {
-			if (!groupAttrsDefined.contains(connIdName)) {
-				if (meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE) && meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)) {
-					AttributeInfoBuilder attrBuilder = AttributeInfoBuilder.define(meta.connIdName)
-							.setNativeName(meta.kohaNativeName)
-							.setType(meta.type)
-							.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
-							.setCreateable(false).setUpdateable(false).setReadable(true);
-					groupBuilder.addAttributeInfo(attrBuilder.build());
-				}
+			if (!groupAttrsDefined.contains(connIdName) && meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE) && meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)) {
+				groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(meta.connIdName).setNativeName(meta.kohaNativeName).setType(meta.type)
+						.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED)).setCreateable(false).setUpdateable(false).setReadable(true).build());
 			}
 		});
 		schemaBuilder.defineObjectClass(groupBuilder.build());
-
 		this.connectorSchema = schemaBuilder.build();
 		LOG.ok("Schema built successfully.");
 		return this.connectorSchema;
 	}
 
+	private String getFreshAuthToken() throws IOException {
+		RestUsersConfiguration config = getConfiguration();
+		String serviceAddr = config.getServiceAddress();
+		String clientId = config.getClientId();
+		GuardedString clientSecretGuarded = config.getClientSecret();
+
+		if (StringUtil.isBlank(serviceAddr) || StringUtil.isBlank(clientId) || clientSecretGuarded == null) {
+			LOG.error("AUTH_OAUTH: Service Address, Client ID or Client Secret not configured for OAuth2.");
+			throw new ConfigurationException("Service Address, Client ID, and Client Secret must be configured for OAuth2.");
+		}
+		final StringBuilder secretBuilder = new StringBuilder();
+		clientSecretGuarded.access(secretBuilder::append);
+		String clientSecret = secretBuilder.toString();
+		String tokenEndpoint = serviceAddr + KOHA_OAUTH_TOKEN_ENDPOINT_SUFFIX;
+		LOG.ok("AUTH_OAUTH: Getting OAuth2 token from {0}", tokenEndpoint);
+		HttpPost tokenRequest = new HttpPost(tokenEndpoint);
+		List<NameValuePair> params = new ArrayList<>();
+		params.add(new BasicNameValuePair("grant_type", "client_credentials"));
+		params.add(new BasicNameValuePair("client_id", clientId));
+		params.add(new BasicNameValuePair("client_secret", clientSecret));
+		tokenRequest.setEntity(new UrlEncodedFormEntity(params, StandardCharsets.UTF_8));
+		tokenRequest.setHeader("Content-Type", "application/x-www-form-urlencoded");
+		tokenRequest.setHeader("Accept", "application/json");
+		String responseBodyForErrorLog = "N/A (Could not read)";
+		try (CloseableHttpResponse response = getHttpClient().execute(tokenRequest)) {
+			int statusCode = response.getStatusLine().getStatusCode();
+			HttpEntity entity = response.getEntity();
+			String responseBody = entity != null ? EntityUtils.toString(entity) : null;
+			responseBodyForErrorLog = responseBody;
+
+			if (statusCode >= 200 && statusCode < 300) {
+				JSONObject jsonResponse = new JSONObject(responseBody);
+				String obtainedToken = jsonResponse.getString("access_token");
+				LOG.ok("AUTH_OAUTH: Successfully obtained OAuth2 access token.");
+				return obtainedToken;
+			} else {
+				LOG.error("AUTH_OAUTH: Failed to obtain OAuth2 token. Status: {0}, Body: {1}", statusCode, responseBody);
+				throw new ConnectorIOException("Failed to obtain OAuth2 token: " + statusCode + " - " + responseBody);
+			}
+		} catch (JSONException e) {
+			LOG.error("AUTH_OAUTH: Error parsing JSON response from token endpoint. Body: {0}", responseBodyForErrorLog, e);
+			throw new ConnectorException("Error parsing JSON response from token endpoint: " + e.getMessage(), e);
+		}
+	}
+
+	private void addAuthHeader(HttpRequestBase request) throws IOException {
+		RestUsersConfiguration config = getConfiguration();
+		if (StringUtil.isNotBlank(config.getClientId()) && config.getClientSecret() != null) {
+			LOG.ok("AUTH: Attempting OAuth2 Client Credentials.");
+			this.oauthAccessToken = getFreshAuthToken();
+			if (StringUtil.isNotBlank(this.oauthAccessToken)) {
+				request.setHeader("Authorization", "Bearer " + this.oauthAccessToken);
+				LOG.ok("AUTH: Using OAuth2 Bearer token for request to {0}", request.getURI());
+				return;
+			} else {
+				LOG.error("AUTH: OAuth2 configured, but failed to obtain/use token. URI: {0}", request.getURI());
+				throw new PermissionDeniedException("OAuth2 authentication configured but could not obtain a valid token.");
+			}
+		}
+		if ("BASIC".equalsIgnoreCase(config.getAuthMethod())) {
+			if (StringUtil.isNotBlank(config.getUsername()) && config.getPassword() != null) {
+				LOG.ok("AUTH: Attempting Basic Authentication for user {0} for request to {1}", config.getUsername(), request.getURI());
+				String username = config.getUsername();
+				GuardedString guardedPassword = config.getPassword();
+				final StringBuilder passwordBuilder = new StringBuilder();
+				guardedPassword.access(passwordBuilder::append);
+				String password = passwordBuilder.toString();
+				String auth = username + ":" + password;
+				byte[] encodedAuth = Base64.getEncoder().encode(auth.getBytes(StandardCharsets.UTF_8));
+				request.setHeader("Authorization", "Basic " + new String(encodedAuth, StandardCharsets.UTF_8));
+				return;
+			} else {
+				LOG.warn("AUTH: authMethod is BASIC, but username/password are not fully configured. URI: {0}", request.getURI());
+			}
+		}
+		LOG.warn("AUTH: No suitable authentication method configured. Request to {0} will be anonymous.", request.getURI());
+	}
+
 	@Override
 	public Uid create(ObjectClass objectClass, Set<Attribute> attributes, OperationOptions operationOptions) {
-		LOG.ok("CREATE: ObjectClass={0}", objectClass);
-		String endpointSuffix;
-		ObjectClassInfo oci;
-		Map<String, AttributeMetadata> metadataMap;
-		Set<String> managedNames;
-
+		String endpointSuffix; ObjectClassInfo oci; Map<String, AttributeMetadata> metadataMap; Set<String> managedNames;
 		if (ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
-			endpointSuffix = PATRONS_ENDPOINT_SUFFIX;
-			oci = schema().findObjectClassInfo(ObjectClass.ACCOUNT_NAME);
-			metadataMap = KOHA_PATRON_ATTRIBUTE_METADATA;
-			managedNames = MANAGED_KOHA_PATRON_CONNID_NAMES;
+			endpointSuffix = PATRONS_ENDPOINT_SUFFIX; oci = schema().findObjectClassInfo(ObjectClass.ACCOUNT_NAME);
+			metadataMap = KOHA_PATRON_ATTRIBUTE_METADATA; managedNames = MANAGED_KOHA_PATRON_CONNID_NAMES;
 		} else if (ObjectClass.GROUP.is(objectClass.getObjectClassValue())) {
-			endpointSuffix = CATEGORIES_ENDPOINT_SUFFIX;
-			oci = schema().findObjectClassInfo(ObjectClass.GROUP_NAME);
-			metadataMap = KOHA_CATEGORY_ATTRIBUTE_METADATA;
-			managedNames = MANAGED_KOHA_CATEGORY_CONNID_NAMES;
-		} else {
-			throw new UnsupportedOperationException("Only Account or Group objects can be created.");
-		}
-
+			endpointSuffix = CATEGORIES_ENDPOINT_SUFFIX; oci = schema().findObjectClassInfo(ObjectClass.GROUP_NAME);
+			metadataMap = KOHA_CATEGORY_ATTRIBUTE_METADATA; managedNames = MANAGED_KOHA_CATEGORY_CONNID_NAMES;
+		} else { throw new UnsupportedOperationException("Create operation unsupported for: " + objectClass); }
 		JSONObject kohaJsonPayload = buildJsonForKoha(attributes, oci, metadataMap, managedNames, true);
 		LOG.info("CREATE: Payload for Koha ({0}): {1}", oci.getType(), kohaJsonPayload.toString());
-
 		String endpoint = getConfiguration().getServiceAddress() + API_BASE_PATH + endpointSuffix;
 		HttpPost request = new HttpPost(endpoint);
 		JSONObject responseJson = callRequest(request, kohaJsonPayload);
-
-		String newNativeUid = null;
-		if (ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
-			newNativeUid = responseJson.optString(KOHA_PATRON_ID_NATIVE_NAME);
-		} else { // GROUP
-			newNativeUid = responseJson.optString(KOHA_CATEGORY_ID_NATIVE_NAME);
-		}
-
-		if (StringUtil.isBlank(newNativeUid)) {
-			throw new ConnectorException("Koha response for CREATE did not contain a usable native UID. Response: " + responseJson.toString());
-		}
-
+		String newNativeUid = ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue()) ? responseJson.optString(KOHA_PATRON_ID_NATIVE_NAME) : responseJson.optString(KOHA_CATEGORY_ID_NATIVE_NAME);
+		if (StringUtil.isBlank(newNativeUid)) { throw new ConnectorException("Koha response for CREATE did not contain native UID. Response: " + responseJson.toString());}
 		LOG.ok("CREATE: Koha object ({0}) created successfully. Native UID={1}", oci.getType(), newNativeUid);
 		return new Uid(newNativeUid);
 	}
 
 	@Override
 	public Uid update(ObjectClass objectClass, Uid uid, Set<Attribute> attributes, OperationOptions operationOptions) {
-		LOG.ok("UPDATE: ObjectClass={0}, UID={1}", objectClass, uid.getUidValue());
-		String endpointSuffix;
-		ObjectClassInfo oci;
-		Map<String, AttributeMetadata> metadataMap;
-		Set<String> managedNames;
-
+		String endpointSuffix; ObjectClassInfo oci; Map<String, AttributeMetadata> metadataMap; Set<String> managedNames;
 		if (ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
-			endpointSuffix = PATRONS_ENDPOINT_SUFFIX;
-			oci = schema().findObjectClassInfo(ObjectClass.ACCOUNT_NAME);
-			metadataMap = KOHA_PATRON_ATTRIBUTE_METADATA;
-			managedNames = MANAGED_KOHA_PATRON_CONNID_NAMES;
+			endpointSuffix = PATRONS_ENDPOINT_SUFFIX; oci = schema().findObjectClassInfo(ObjectClass.ACCOUNT_NAME);
+			metadataMap = KOHA_PATRON_ATTRIBUTE_METADATA; managedNames = MANAGED_KOHA_PATRON_CONNID_NAMES;
 		} else if (ObjectClass.GROUP.is(objectClass.getObjectClassValue())) {
-			endpointSuffix = CATEGORIES_ENDPOINT_SUFFIX;
-			oci = schema().findObjectClassInfo(ObjectClass.GROUP_NAME);
-			metadataMap = KOHA_CATEGORY_ATTRIBUTE_METADATA;
-			managedNames = MANAGED_KOHA_CATEGORY_CONNID_NAMES;
-		} else {
-			throw new UnsupportedOperationException("Only Account or Group objects can be updated.");
-		}
-
-		if (attributes == null || attributes.isEmpty()) {
-			LOG.info("UPDATE: No attributes to update for UID={0}", uid.getUidValue());
-			return uid;
-		}
-
+			endpointSuffix = CATEGORIES_ENDPOINT_SUFFIX; oci = schema().findObjectClassInfo(ObjectClass.GROUP_NAME);
+			metadataMap = KOHA_CATEGORY_ATTRIBUTE_METADATA; managedNames = MANAGED_KOHA_CATEGORY_CONNID_NAMES;
+		} else { throw new UnsupportedOperationException("Update operation unsupported for: " + objectClass); }
+		if (attributes == null || attributes.isEmpty()) { LOG.info("UPDATE: No attributes to update for UID={0}", uid.getUidValue()); return uid; }
 		JSONObject kohaJsonPayload = buildJsonForKoha(attributes, oci, metadataMap, managedNames, false);
 		LOG.info("UPDATE: Payload for Koha ({0}): {1}", oci.getType(), kohaJsonPayload.toString());
-
 		String endpoint = getConfiguration().getServiceAddress() + API_BASE_PATH + endpointSuffix + "/" + uid.getUidValue();
 		HttpPut request = new HttpPut(endpoint);
 		callRequest(request, kohaJsonPayload);
-
 		LOG.ok("UPDATE: Koha object ({0}) updated successfully. UID={1}", oci.getType(), uid.getUidValue());
 		return uid;
 	}
@@ -395,55 +374,21 @@ public class RestUsersConnector
 	private JSONObject buildJsonForKoha(Set<Attribute> attributes, ObjectClassInfo oci,
 										Map<String, AttributeMetadata> metadataMap,
 										Set<String> managedConnIdNames, boolean isCreate) {
-		JSONObject jo = new JSONObject();
-		Set<String> processedKohaAttrs = new HashSet<>();
-
+		JSONObject jo = new JSONObject(); Set<String> processedKohaAttrs = new HashSet<>();
 		for (Attribute attr : attributes) {
-			String connIdAttrName = attr.getName();
-			List<Object> values = attr.getValue();
-
-			if (Uid.NAME.equals(connIdAttrName)) {
-				continue;
-			}
-
+			String connIdAttrName = attr.getName(); List<Object> values = attr.getValue();
+			if (Uid.NAME.equals(connIdAttrName)) continue;
 			AttributeMetadata meta = metadataMap.get(connIdAttrName);
 			if (Name.NAME.equals(connIdAttrName)) {
-				if (ObjectClass.ACCOUNT_NAME.equals(oci.getType())) {
-					meta = metadataMap.get(ATTR_USERID);
-				} else {
-					meta = metadataMap.get(ATTR_CATEGORY_DESCRIPTION);
-				}
+				meta = ObjectClass.ACCOUNT_NAME.equals(oci.getType()) ? metadataMap.get(ATTR_USERID) : metadataMap.get(ATTR_CATEGORY_DESCRIPTION);
 			}
-
-			if (meta == null) {
-				LOG.warn("BUILD_JSON: Metadata not found for ConnId Attribute '{0}'. Skipping.", connIdAttrName);
-				continue;
-			}
+			if (meta == null) { LOG.warn("BUILD_JSON: Metadata for ConnId Attr '{0}' not found. Skipping.", connIdAttrName); continue; }
 			String kohaAttrName = meta.kohaNativeName;
-
-			if (!managedConnIdNames.contains(meta.connIdName)) {
-				LOG.info("BUILD_JSON: ConnId Attribute '{0}' (Koha: '{1}') is not in its managed set. Skipping.", meta.connIdName, kohaAttrName);
-				continue;
-			}
-			if (isCreate && meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)) {
-				LOG.info("BUILD_JSON: Attribute '{0}' (Koha: '{1}') is not creatable. Skipping for CREATE.", meta.connIdName, kohaAttrName);
-				continue;
-			}
-			if (!isCreate && meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)) {
-				LOG.info("BUILD_JSON: Attribute '{0}' (Koha: '{1}') is not updateable. Skipping for UPDATE.", meta.connIdName, kohaAttrName);
-				continue;
-			}
-
-			if (values == null || values.isEmpty() || values.get(0) == null) {
-				if (!isCreate) {
-					jo.put(kohaAttrName, JSONObject.NULL);
-				}
-				continue;
-			}
-			if (processedKohaAttrs.contains(kohaAttrName)) {
-				continue;
-			}
-
+			if (!managedConnIdNames.contains(meta.connIdName)) { LOG.info("BUILD_JSON: ConnId Attr '{0}' (Koha: '{1}') not in managed set. Skipping.", meta.connIdName, kohaAttrName); continue; }
+			if (isCreate && meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)) { LOG.info("BUILD_JSON: Attr '{0}' not creatable. Skipping.", meta.connIdName); continue; }
+			if (!isCreate && meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)) { LOG.info("BUILD_JSON: Attr '{0}' not updateable. Skipping.", meta.connIdName); continue; }
+			if (values == null || values.isEmpty() || values.get(0) == null) { if (!isCreate) jo.put(kohaAttrName, JSONObject.NULL); continue; }
+			if (processedKohaAttrs.contains(kohaAttrName)) continue;
 			Object kohaValue;
 			if (meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED)) {
 				JSONArray ja = new JSONArray();
@@ -454,36 +399,23 @@ public class RestUsersConnector
 			} else {
 				kohaValue = convertConnIdValueToKohaJsonValue(values.get(0), meta.type, meta.connIdName);
 			}
-			jo.put(kohaAttrName, kohaValue);
-			processedKohaAttrs.add(kohaAttrName);
+			jo.put(kohaAttrName, kohaValue); processedKohaAttrs.add(kohaAttrName);
 		}
 		return jo;
 	}
 
 	private Object convertConnIdValueToKohaJsonValue(Object connIdValue, Class<?> connIdType, String connIdAttrName) {
-		if (connIdValue == null) {
-			return JSONObject.NULL;
-		}
+		if (connIdValue == null) return JSONObject.NULL;
 		if (connIdType.equals(String.class)) {
 			AttributeMetadata meta = KOHA_PATRON_ATTRIBUTE_METADATA.get(connIdAttrName);
 			if (meta == null) meta = KOHA_CATEGORY_ATTRIBUTE_METADATA.get(connIdAttrName);
-
-			if (meta != null && meta.kohaNativeName != null) {
-				if (meta.kohaNativeName.equals(ATTR_DATE_OF_BIRTH) || meta.kohaNativeName.equals(ATTR_EXPIRY_DATE) ||
-						meta.kohaNativeName.equals(ATTR_DATE_ENROLLED) || meta.kohaNativeName.equals(ATTR_DATE_RENEWED)) {
-					try {
-						LocalDate.parse(connIdValue.toString(), KOHA_DATE_FORMATTER);
-						return connIdValue.toString();
-					} catch (DateTimeParseException e) {
-						LOG.error("Invalid date format for attribute {0}: {1}. Expected yyyy-MM-dd.", connIdAttrName, connIdValue);
-						throw new InvalidAttributeValueException("Invalid date format for " + connIdAttrName + ": " + connIdValue);
-					}
-				}
+			if (meta != null && meta.kohaNativeName != null && (meta.kohaNativeName.equals(ATTR_DATE_OF_BIRTH) || meta.kohaNativeName.equals(ATTR_EXPIRY_DATE) ||
+					meta.kohaNativeName.equals(ATTR_DATE_ENROLLED) || meta.kohaNativeName.equals(ATTR_DATE_RENEWED))) {
+				try { LocalDate.parse(connIdValue.toString(), KOHA_DATE_FORMATTER); return connIdValue.toString(); }
+				catch (DateTimeParseException e) { LOG.error("Invalid date format for {0}: {1}. Expected yyyy-MM-dd.", connIdAttrName, connIdValue); throw new InvalidAttributeValueException("Invalid date format for " + connIdAttrName + ": " + connIdValue, e); }
 			}
 			return connIdValue.toString();
-		} else if (connIdType.equals(Boolean.class)) {
-			return connIdValue;
-		} else if (connIdType.equals(Integer.class) || connIdType.equals(Long.class)) {
+		} else if (connIdType.equals(Boolean.class) || connIdType.equals(Integer.class) || connIdType.equals(Long.class)) {
 			return connIdValue;
 		}
 		return connIdValue.toString();
@@ -491,25 +423,13 @@ public class RestUsersConnector
 
 	@Override
 	public void delete(ObjectClass objectClass, Uid uid, OperationOptions operationOptions) {
-		LOG.ok("DELETE: ObjectClass={0}, UID={1}", objectClass, uid.getUidValue());
-		String endpointSuffix;
-		if (ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
-			endpointSuffix = PATRONS_ENDPOINT_SUFFIX;
-		} else if (ObjectClass.GROUP.is(objectClass.getObjectClassValue())) {
-			endpointSuffix = CATEGORIES_ENDPOINT_SUFFIX;
-		} else {
-			throw new UnsupportedOperationException("Only Account or Group objects can be deleted.");
-		}
-
+		String endpointSuffix = ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue()) ? PATRONS_ENDPOINT_SUFFIX :
+				(ObjectClass.GROUP.is(objectClass.getObjectClassValue()) ? CATEGORIES_ENDPOINT_SUFFIX : null);
+		if (endpointSuffix == null) throw new UnsupportedOperationException("Delete unsupported for: " + objectClass);
 		String endpoint = getConfiguration().getServiceAddress() + API_BASE_PATH + endpointSuffix + "/" + uid.getUidValue();
 		HttpDelete request = new HttpDelete(endpoint);
-		try {
-			callRequest(request);
-			LOG.ok("DELETE: Object with UID={0} deleted successfully from {1}", uid.getUidValue(), endpointSuffix);
-		} catch (IOException e) {
-			LOG.error("DELETE: Error deleting object with UID={0}. Message: {1}", uid.getUidValue(), e.getMessage());
-			throw new ConnectorIOException("Error during HTTP call for DELETE: " + e.getMessage(), e);
-		}
+		try { callRequest(request); LOG.ok("DELETE: UID={0} from {1} successful.", uid.getUidValue(), endpointSuffix); }
+		catch (IOException e) { LOG.error("DELETE: Error for UID={0}. Msg: {1}", uid.getUidValue(),e.getMessage()); throw new ConnectorIOException("DELETE HTTP call failed: " + e.getMessage(), e); }
 	}
 
 	@Override
@@ -519,154 +439,110 @@ public class RestUsersConnector
 
 	@Override
 	public void executeQuery(ObjectClass objectClass, RestUsersFilter filter, ResultsHandler handler, OperationOptions options) {
-		LOG.ok("EXECUTE_QUERY: ObjectClass={0}, Filter={1}, Options={2}", objectClass, filter, options);
-
 		ObjectClassInfo oci = schema().findObjectClassInfo(objectClass.getObjectClassValue());
-		if (oci == null) {
-			throw new ConnectorException("Unsupported object class for query: " + objectClass.getObjectClassValue());
-		}
-
-		String baseEndpoint;
-		Map<String, AttributeMetadata> metadataMap;
-
+		if (oci == null) throw new ConnectorException("Unsupported object class for query: " + objectClass);
+		String baseEndpoint; Map<String, AttributeMetadata> metadataMap;
 		if (ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
 			baseEndpoint = getConfiguration().getServiceAddress() + API_BASE_PATH + PATRONS_ENDPOINT_SUFFIX;
 			metadataMap = KOHA_PATRON_ATTRIBUTE_METADATA;
 		} else if (ObjectClass.GROUP.is(objectClass.getObjectClassValue())) {
 			baseEndpoint = getConfiguration().getServiceAddress() + API_BASE_PATH + CATEGORIES_ENDPOINT_SUFFIX;
 			metadataMap = KOHA_CATEGORY_ATTRIBUTE_METADATA;
-		} else {
-			LOG.warn("EXECUTE_QUERY: Unsupported ObjectClass {0}", objectClass);
-			return;
-		}
-
+		} else { LOG.warn("EXECUTE_QUERY: Unsupported ObjectClass {0}", objectClass); return; }
 		try {
 			int pageSize = options.getPageSize() != null ? options.getPageSize() : 100;
-			int pageOffset = options.getPagedResultsOffset() != null ? options.getPagedResultsOffset() : 1;
-
-			String queryParams = "?_per_page=" + pageSize + "&_page=" + pageOffset;
+			int currentPageForApi = 1;
+			// No usamos PagedResultsCookie directamente si no podemos importarlo.
+			// La paginación se hará obteniendo todas las páginas en un bucle.
 
 			if (filter != null && StringUtil.isNotBlank(filter.getByUid())) {
-				String specificEndpoint = baseEndpoint + "/" + filter.getByUid();
-				HttpGet request = new HttpGet(specificEndpoint); // Paginación no suele aplicar a GET by ID
-				String responseStr = callRequest(request);
-				JSONObject itemJson = new JSONObject(responseStr);
-				ConnectorObject connectorObject = convertKohaJsonToConnectorObject(itemJson, oci, metadataMap);
-				if (connectorObject != null) {
-					handler.handle(connectorObject);
-				}
+				HttpGet request = new HttpGet(baseEndpoint + "/" + filter.getByUid());
+				JSONObject itemJson = new JSONObject(callRequest(request));
+				ConnectorObject co = convertKohaJsonToConnectorObject(itemJson, oci, metadataMap);
+				if (co != null) handler.handle(co);
 				return;
 			}
 
-			if (filter != null && StringUtil.isNotBlank(filter.getByName())) {
-				if (ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
-					queryParams += "&userid=" + filter.getByName(); // ¡CONFIRMAR PARÁMETRO!
-				} else {
-					queryParams += "&description=" + filter.getByName(); // ¡CONFIRMAR PARÁMETRO!
+			List<String> baseQueryParamsList = new ArrayList<>();
+			baseQueryParamsList.add("_per_page=" + pageSize);
+
+			String filterQueryString = null;
+			if (filter != null) {
+				String kohaFieldNameForName = ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue()) ?
+						KOHA_PATRON_ATTRIBUTE_METADATA.get(ATTR_USERID).kohaNativeName :
+						KOHA_CATEGORY_ATTRIBUTE_METADATA.get(ATTR_CATEGORY_DESCRIPTION).kohaNativeName;
+				String kohaFieldNameForEmail = ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue()) && KOHA_PATRON_ATTRIBUTE_METADATA.containsKey(ATTR_EMAIL) ?
+						KOHA_PATRON_ATTRIBUTE_METADATA.get(ATTR_EMAIL).kohaNativeName : null;
+				List<String> qFilters = new ArrayList<>();
+				if (StringUtil.isNotBlank(filter.getByName())) {
+					qFilters.add(kohaFieldNameForName + ":" + filter.getByName()); // ¡CONFIRMAR SINTAXIS!
+				}
+				if (StringUtil.isNotBlank(filter.getByEmail()) && kohaFieldNameForEmail != null) {
+					qFilters.add(kohaFieldNameForEmail + ":" + filter.getByEmail()); // ¡CONFIRMAR SINTAXIS!
+				}
+				if (!qFilters.isEmpty()) {
+					filterQueryString = String.join(" AND ", qFilters); // ¡CONFIRMAR SINTAXIS 'AND' PARA 'q'!
+					baseQueryParamsList.add("_match=exact");
+					try { baseQueryParamsList.add("q=" + URLEncoder.encode(filterQueryString, StandardCharsets.UTF_8.name())); }
+					catch (UnsupportedEncodingException e) { throw new ConnectorIOException("UTF-8 encoding not supported", e); }
 				}
 			}
-			if (filter != null && StringUtil.isNotBlank(filter.getByEmail())) {
-				queryParams += "&email=" + filter.getByEmail(); // ¡CONFIRMAR PARÁMETRO!
-			}
 
+			boolean moreResults;
+			String baseQueryPart = String.join("&", baseQueryParamsList);
 
-			boolean moreResults = true;
-			while(moreResults) {
-				HttpGet request = new HttpGet(baseEndpoint + queryParams);
+			do {
+				String pageParam = "_page=" + currentPageForApi;
+				String finalQueryParams = "?" + (baseQueryPart.isEmpty() ? pageParam : baseQueryPart + "&" + pageParam);
+
+				HttpGet request = new HttpGet(baseEndpoint + finalQueryParams);
+				LOG.ok("EXECUTE_QUERY: Requesting URL: {0}", request.getURI());
 				String responseStr = callRequest(request);
 				JSONArray itemsArray = new JSONArray(responseStr);
 
-				if (itemsArray.length() == 0) {
-					moreResults = false;
-					break;
-				}
-
 				for (int i = 0; i < itemsArray.length(); i++) {
-					JSONObject itemJson = itemsArray.getJSONObject(i);
-					ConnectorObject connectorObject = convertKohaJsonToConnectorObject(itemJson, oci, metadataMap);
-					if (connectorObject != null && !handler.handle(connectorObject)) {
-						moreResults = false;
-						break;
+					ConnectorObject co = convertKohaJsonToConnectorObject(itemsArray.getJSONObject(i), oci, metadataMap);
+					if (co != null && !handler.handle(co)){
+						LOG.ok("EXECUTE_QUERY: Handler stopped processing.");
+						return;
 					}
 				}
 				if (itemsArray.length() < pageSize) {
 					moreResults = false;
 				} else {
-					pageOffset++;
-					// Reconstruir queryParams para la siguiente página
-					queryParams = "?_per_page=" + pageSize + "&_page=" + pageOffset;
-					if (filter != null && StringUtil.isNotBlank(filter.getByName())) {
-						if (ObjectClass.ACCOUNT.is(objectClass.getObjectClassValue())) {
-							queryParams += "&userid=" + filter.getByName();
-						} else { queryParams += "&description=" + filter.getByName();}
-					}
-					if (filter != null && StringUtil.isNotBlank(filter.getByEmail())) {
-						queryParams += "&email=" + filter.getByEmail();
-					}
+					currentPageForApi++;
+					moreResults = true;
 				}
-			}
-
-		} catch (IOException | JSONException e) {
-			LOG.error("EXECUTE_QUERY: Error during query. Message: {0}", e.getMessage(), e);
-			throw new ConnectorIOException("Error during HTTP call or JSON processing for EXECUTE_QUERY: " + e.getMessage(), e);
-		}
+			} while (moreResults);
+		} catch (IOException | JSONException e) { LOG.error("EXECUTE_QUERY: Error. Msg: {0}", e.getMessage(), e); throw new ConnectorIOException("Query failed: " + e.getMessage(), e); }
 	}
 
 	private ConnectorObject convertKohaJsonToConnectorObject(JSONObject kohaJson, ObjectClassInfo oci, Map<String, AttributeMetadata> metadataMap) {
 		if (kohaJson == null) return null;
-
-		// ConnectorObjectBuilder builder = new ConnectorObjectBuilder().setObjectClass(oci.getType()); // Línea original con error
-		ConnectorObjectBuilder builder = new ConnectorObjectBuilder();
-		builder.setObjectClass(new ObjectClass(oci.getType()));
-
-		String uidValue = null;
-		String nameValue = null;
-
-		// Iterar sobre los metadatos definidos en el schema para asegurar que solo procesamos lo conocido
+		ConnectorObjectBuilder builder = new ConnectorObjectBuilder().setObjectClass(new ObjectClass(oci.getType()));
+		String uidValue = null; String nameValue = null;
 		for (AttributeInfo attrInfoFromSchema : oci.getAttributeInfo()) {
 			String connIdAttrName = attrInfoFromSchema.getName();
-			AttributeMetadata meta = metadataMap.get(connIdAttrName); // Buscar por nombre ConnId
-
-			// Casos especiales para Uid.NAME y Name.NAME si su connIdName no está directamente en metadataMap
-			// (aunque deberían estar si ATTR_USERID, etc. son los connIdName)
-			if (Uid.NAME.equals(connIdAttrName)) {
-				meta = new AttributeMetadata(Uid.NAME, KOHA_PATRON_ID_NATIVE_NAME, String.class); // Asumir String para UID
-				if (ObjectClass.GROUP_NAME.equals(oci.getType())) {
-					meta = new AttributeMetadata(Uid.NAME, KOHA_CATEGORY_ID_NATIVE_NAME, String.class);
-				}
-			} else if (Name.NAME.equals(connIdAttrName)) {
-				if (ObjectClass.ACCOUNT_NAME.equals(oci.getType())) {
-					meta = metadataMap.get(ATTR_USERID);
-				} else { // GROUP
-					meta = metadataMap.get(ATTR_CATEGORY_DESCRIPTION);
-				}
-			}
-
-
-			if (meta == null || meta.kohaNativeName == null) {
-				//LOG.warn("CONVERT_JSON: No metadata or native name for ConnId attribute '{0}'. Skipping.", connIdAttrName);
+			AttributeMetadata meta = Uid.NAME.equals(connIdAttrName) ? new AttributeMetadata(Uid.NAME, ObjectClass.ACCOUNT_NAME.equals(oci.getType()) ? KOHA_PATRON_ID_NATIVE_NAME : KOHA_CATEGORY_ID_NATIVE_NAME, String.class) :
+					(Name.NAME.equals(connIdAttrName) ? (ObjectClass.ACCOUNT_NAME.equals(oci.getType()) ? metadataMap.get(ATTR_USERID) : metadataMap.get(ATTR_CATEGORY_DESCRIPTION)) :
+							metadataMap.get(connIdAttrName));
+			if (meta == null || meta.kohaNativeName == null || (meta.flags != null && meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)) ||
+					!kohaJson.has(meta.kohaNativeName) || kohaJson.isNull(meta.kohaNativeName)) {
 				continue;
 			}
-			if (!kohaJson.has(meta.kohaNativeName) || kohaJson.isNull(meta.kohaNativeName)) {
-				continue;
-			}
-			if (meta.flags != null && meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)) {
-				continue;
-			}
-
 			Object kohaNativeValue = kohaJson.get(meta.kohaNativeName);
 			Object connIdValue = convertKohaValueToConnIdValue(kohaNativeValue, meta.type, meta.connIdName);
-
 			if (connIdValue != null) {
-				if (attrInfoFromSchema.isMultiValued()) { // Usar info del schema de ConnId
-					// Si el valor de Koha ya es un JSONArray (ej. extended_attributes), se debe iterar
+				if (attrInfoFromSchema.isMultiValued()) {
 					if (kohaNativeValue instanceof JSONArray) {
+						List<Object> multiValues = new ArrayList<>();
 						JSONArray kohaArray = (JSONArray) kohaNativeValue;
 						for(int i=0; i < kohaArray.length(); i++) {
-							builder.addAttribute(AttributeBuilder.build(meta.connIdName,
-									convertKohaValueToConnIdValue(kohaArray.get(i), meta.type, meta.connIdName)));
+							Object convertedItem = convertKohaValueToConnIdValue(kohaArray.get(i), meta.type, meta.connIdName);
+							if (convertedItem != null) multiValues.add(convertedItem);
 						}
-					} else { // Si no es JSONArray pero ConnId espera multivaluado, envolver
+						if (!multiValues.isEmpty()) builder.addAttribute(AttributeBuilder.build(meta.connIdName, multiValues));
+					} else {
 						builder.addAttribute(AttributeBuilder.build(meta.connIdName, Collections.singletonList(connIdValue)));
 					}
 				} else {
@@ -674,151 +550,76 @@ public class RestUsersConnector
 				}
 			}
 		}
-
-		// Asegurar que Uid y Name se establezcan correctamente
-		if (ObjectClass.ACCOUNT_NAME.equals(oci.getType())) {
-			uidValue = kohaJson.optString(KOHA_PATRON_ID_NATIVE_NAME);
-			AttributeMetadata accountNameMeta = metadataMap.get(ATTR_USERID);
-			if (accountNameMeta != null) nameValue = kohaJson.optString(accountNameMeta.kohaNativeName);
-		} else if (ObjectClass.GROUP_NAME.equals(oci.getType())) {
-			uidValue = kohaJson.optString(KOHA_CATEGORY_ID_NATIVE_NAME);
-			AttributeMetadata groupNameMeta = metadataMap.get(ATTR_CATEGORY_DESCRIPTION);
-			if (groupNameMeta != null) nameValue = kohaJson.optString(groupNameMeta.kohaNativeName);
-		}
-
-		if (StringUtil.isBlank(uidValue)) {
-			LOG.error("CONVERT_JSON: Could not determine UID for Koha object: {0}", kohaJson.toString());
-			return null;
-		}
+		uidValue = ObjectClass.ACCOUNT_NAME.equals(oci.getType()) ? kohaJson.optString(KOHA_PATRON_ID_NATIVE_NAME) : kohaJson.optString(KOHA_CATEGORY_ID_NATIVE_NAME);
+		AttributeMetadata nameMetaVal = ObjectClass.ACCOUNT_NAME.equals(oci.getType()) ? metadataMap.get(ATTR_USERID) : metadataMap.get(ATTR_CATEGORY_DESCRIPTION);
+		if (nameMetaVal != null) nameValue = kohaJson.optString(nameMetaVal.kohaNativeName);
+		if (StringUtil.isBlank(uidValue)) { LOG.error("CONVERT_JSON: No UID for Koha object: {0}", kohaJson.toString()); return null; }
 		builder.setUid(uidValue);
-
-		if (StringUtil.isNotBlank(nameValue)) {
-			builder.setName(nameValue);
-		} else {
-			LOG.warn("CONVERT_JSON: Could not determine __NAME__ for Koha object with UID: {0}. Using UID as __NAME__.", uidValue);
-			builder.setName(uidValue);
-		}
-
+		builder.setName(StringUtil.isNotBlank(nameValue) ? nameValue : uidValue);
 		return builder.build();
 	}
 
 	private Object convertKohaValueToConnIdValue(Object kohaValue, Class<?> connIdType, String connIdAttrName) {
-		if (kohaValue == null || JSONObject.NULL.equals(kohaValue)) {
-			return null;
-		}
+		if (kohaValue == null || JSONObject.NULL.equals(kohaValue)) return null;
 		try {
 			if (connIdType.equals(String.class)) {
 				AttributeMetadata meta = KOHA_PATRON_ATTRIBUTE_METADATA.get(connIdAttrName);
 				if (meta == null) meta = KOHA_CATEGORY_ATTRIBUTE_METADATA.get(connIdAttrName);
-
-				if (meta != null && meta.kohaNativeName != null) {
-					// Validar/Formatear fechas si el tipo ConnId es String pero el campo semánticamente es fecha
-					if (meta.kohaNativeName.equals(ATTR_DATE_OF_BIRTH) || meta.kohaNativeName.equals(ATTR_EXPIRY_DATE) ||
-							meta.kohaNativeName.equals(ATTR_DATE_ENROLLED) || meta.kohaNativeName.equals(ATTR_DATE_RENEWED)) {
-						return LocalDate.parse(kohaValue.toString(), KOHA_DATE_FORMATTER).toString();
-					} else if (meta.kohaNativeName.equals(ATTR_UPDATED_ON) || meta.kohaNativeName.equals(ATTR_LAST_SEEN)) {
-						// Devolver como String en formato ISO para consistencia, ya que el tipo ConnId es String
-						return ZonedDateTime.parse(kohaValue.toString(), KOHA_DATETIME_FORMATTER).toString();
-					}
+				if (meta != null && meta.kohaNativeName != null && (meta.kohaNativeName.equals(ATTR_DATE_OF_BIRTH) || meta.kohaNativeName.equals(ATTR_EXPIRY_DATE) ||
+						meta.kohaNativeName.equals(ATTR_DATE_ENROLLED) || meta.kohaNativeName.equals(ATTR_DATE_RENEWED))) {
+					return LocalDate.parse(kohaValue.toString(), KOHA_DATE_FORMATTER).toString();
+				} else if (meta != null && meta.kohaNativeName != null && (meta.kohaNativeName.equals(ATTR_UPDATED_ON) || meta.kohaNativeName.equals(ATTR_LAST_SEEN))) {
+					return ZonedDateTime.parse(kohaValue.toString(), KOHA_DATETIME_FORMATTER).toString();
 				}
 				return kohaValue.toString();
 			} else if (connIdType.equals(Boolean.class)) {
-				if (kohaValue instanceof Boolean) return kohaValue;
-				String kohaStr = kohaValue.toString().toLowerCase();
-				return "true".equals(kohaStr) || "1".equals(kohaStr) || "yes".equals(kohaStr);
+				return kohaValue instanceof Boolean ? kohaValue : ("true".equalsIgnoreCase(kohaValue.toString()) || "1".equals(kohaValue.toString()));
 			} else if (connIdType.equals(Integer.class)) {
-				if (kohaValue instanceof Integer) return kohaValue;
-				return Integer.parseInt(kohaValue.toString());
+				return kohaValue instanceof Integer ? kohaValue : Integer.parseInt(kohaValue.toString());
 			} else if (connIdType.equals(Long.class)) {
-				if (kohaValue instanceof Long) return kohaValue;
-				return Long.parseLong(kohaValue.toString());
+				return kohaValue instanceof Long ? kohaValue : Long.parseLong(kohaValue.toString());
 			}
-		} catch (NumberFormatException | DateTimeParseException e) {
-			LOG.warn("CONVERT_KOHA_VALUE: Parse error for value '{0}' (attr: {1}) to type '{2}'. Error: {3}",
-					kohaValue, connIdAttrName, connIdType.getSimpleName(), e.getMessage());
-			return null;
-		}
-		return kohaValue.toString(); // Fallback
-	}
-
-	//region Métodos HTTP y Autenticación (Basic Auth por ahora)
-	private void addAuthHeader(HttpRequestBase request) {
-		// TODO: Implementar lógica de obtención y uso de token OAuth2 cuando RestUsersConfiguration lo soporte.
-		String username = getConfiguration().getUsername();
-		GuardedString guardedPassword = getConfiguration().getPassword();
-		if (StringUtil.isNotBlank(username) && guardedPassword != null) {
-			final StringBuilder passwordBuilder = new StringBuilder();
-			guardedPassword.access(passwordBuilder::append);
-			String password = passwordBuilder.toString();
-			String auth = username + ":" + password;
-			byte[] encodedAuth = Base64.getEncoder().encode(auth.getBytes(StandardCharsets.UTF_8));
-			request.setHeader("Authorization", "Basic " + new String(encodedAuth, StandardCharsets.UTF_8));
-		} else {
-			LOG.warn("AUTH: Username/password for Basic Auth not configured. Request will be anonymous if API allows.");
-		}
+		} catch (NumberFormatException | DateTimeParseException e) { LOG.warn("CONVERT_KOHA_VALUE: Parse error for '{0}' (attr: {1}) to type '{2}'. Error: {3}",kohaValue, connIdAttrName, connIdType.getSimpleName(), e.getMessage()); return null; }
+		return kohaValue.toString();
 	}
 
 	private JSONObject callRequest(HttpEntityEnclosingRequestBase request, JSONObject payload) {
 		LOG.ok("HTTP_CALL_ENTITY: URI={0}", request.getURI());
-		request.setHeader("Content-Type", "application/json");
-		request.setHeader("Accept", "application/json");
-		addAuthHeader(request);
-		if (payload != null) {
-			request.setEntity(new ByteArrayEntity(StringUtils.getBytesUtf8(payload.toString())));
-		}
+		request.setHeader("Content-Type", "application/json"); request.setHeader("Accept", "application/json");
+		try { addAuthHeader(request); } catch (IOException e) { throw new ConnectorIOException("Auth header setup failed", e); }
+		if (payload != null) request.setEntity(new ByteArrayEntity(StringUtils.getBytesUtf8(payload.toString())));
 		try (CloseableHttpResponse response = execute(request)) {
-			processResponseErrors(response);
-			String result = EntityUtils.toString(response.getEntity());
+			processResponseErrors(response); String result = EntityUtils.toString(response.getEntity());
 			LOG.ok("HTTP_CALL_ENTITY: Response Body={0}", result);
-			if (StringUtil.isBlank(result)) return new JSONObject();
-			return new JSONObject(result);
-		} catch (IOException e) {
-			throw new ConnectorIOException("HTTP call (with entity) failed: " + e.getMessage(), e);
-		} catch (JSONException e) {
-			throw new ConnectorException("JSON parsing of response (with entity) failed: " + e.getMessage(), e);
-		}
+			return StringUtil.isBlank(result) ? new JSONObject() : new JSONObject(result);
+		} catch (IOException e) { throw new ConnectorIOException("HTTP call (with entity) failed: " + e.getMessage(), e); }
+		catch (JSONException e) { throw new ConnectorException("JSON parsing of response (with entity) failed: " + e.getMessage(), e); }
 	}
 
 	private String callRequest(HttpRequestBase request) throws IOException {
 		LOG.ok("HTTP_CALL_NO_ENTITY: URI={0}", request.getURI());
-		request.setHeader("Accept", "application/json");
-		addAuthHeader(request);
+		request.setHeader("Accept", "application/json"); addAuthHeader(request);
 		try (CloseableHttpResponse response = execute(request)) {
-			processResponseErrors(response);
-			String result = EntityUtils.toString(response.getEntity());
-			LOG.ok("HTTP_CALL_NO_ENTITY: Response Body={0}", result);
-			return result;
+			processResponseErrors(response); String result = EntityUtils.toString(response.getEntity());
+			LOG.ok("HTTP_CALL_NO_ENTITY: Response Body={0}", result); return result;
 		}
 	}
 
 	@Override
-	public void processResponseErrors(CloseableHttpResponse response) throws ConnectorIOException { // Cambiado de protected a public
-		int statusCode = response.getStatusLine().getStatusCode();
-		if (statusCode >= 200 && statusCode < 300) return;
-		String responseBody = null;
-		HttpEntity entity = response.getEntity();
-		if (entity != null) {
-			try {
-				responseBody = EntityUtils.toString(entity);
-			} catch (IOException e) {
-				LOG.warn("Cannot read response body for error {0}: {1}", statusCode, e.getMessage());
-			}
-		}
-		String message = "HTTP error " + statusCode + " " + response.getStatusLine().getReasonPhrase() +
-				(responseBody != null ? " : " + responseBody : "");
+	public void processResponseErrors(CloseableHttpResponse response) throws ConnectorIOException {
+		int statusCode = response.getStatusLine().getStatusCode(); if (statusCode >= 200 && statusCode < 300) return;
+		String responseBody = null; HttpEntity entity = response.getEntity();
+		if (entity != null) { try { responseBody = EntityUtils.toString(entity); } catch (IOException e) { LOG.warn("Cannot read error response body for {0}: {1}", statusCode, e.getMessage()); }}
+		String message = "HTTP error " + statusCode + " " + response.getStatusLine().getReasonPhrase() + (responseBody != null ? " : " + responseBody : "");
 		LOG.error("HTTP_ERROR: {0}", message);
 		try { response.close(); } catch (IOException e) { LOG.warn("Failed to close error response: {0}", e.getMessage());}
 		switch (statusCode) {
-			case 400: throw new InvalidAttributeValueException(message);
-			case 401: case 403: throw new PermissionDeniedException(message);
-			case 404: throw new UnknownUidException(message);
-			case 408: throw new OperationTimeoutException(message);
-			case 409: throw new AlreadyExistsException(message);
-			case 412: throw new PreconditionFailedException(message);
+			case 400: throw new InvalidAttributeValueException(message); case 401: case 403: throw new PermissionDeniedException(message);
+			case 404: throw new UnknownUidException(message);            case 408: throw new OperationTimeoutException(message);
+			case 409: throw new AlreadyExistsException(message);         case 412: throw new PreconditionFailedException(message);
 			default: throw new ConnectorIOException(message);
 		}
 	}
-	//endregion
 
 	@Override
 	public void test() {
