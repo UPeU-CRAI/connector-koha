@@ -299,36 +299,52 @@ public class RestUsersConnector
 
 	private void addAuthHeader(HttpRequestBase request) throws IOException {
 		RestUsersConfiguration config = getConfiguration();
+
+		// ======== OAuth2 Client Credentials ========
 		if (StringUtil.isNotBlank(config.getClientId()) && config.getClientSecret() != null) {
-			LOG.ok("AUTH: Attempting OAuth2 Client Credentials.");
+			LOG.ok("AUTH: Intentando autenticación OAuth2 (Client Credentials)");
 			this.oauthAccessToken = getFreshAuthToken();
 			if (StringUtil.isNotBlank(this.oauthAccessToken)) {
 				request.setHeader("Authorization", "Bearer " + this.oauthAccessToken);
-				LOG.ok("AUTH: Using OAuth2 Bearer token for request to {0}", request.getURI());
+				LOG.ok("AUTH: Usando token Bearer para la solicitud: {0}", request.getURI());
 				return;
 			} else {
-				LOG.error("AUTH: OAuth2 configured, but failed to obtain/use token. URI: {0}", request.getURI());
-				throw new PermissionDeniedException("OAuth2 authentication configured but could not obtain a valid token.");
+				LOG.error("AUTH: Falló la obtención de token OAuth2 para la URI: {0}", request.getURI());
+				throw new PermissionDeniedException("Configurado OAuth2, pero no se pudo obtener token válido.");
 			}
 		}
+
+		// ======== Basic Auth ========
 		if ("BASIC".equalsIgnoreCase(config.getAuthMethod())) {
-			if (StringUtil.isNotBlank(config.getUsername()) && config.getPassword() != null) {
-				LOG.ok("AUTH: Attempting Basic Authentication for user {0} for request to {1}", config.getUsername(), request.getURI());
-				String username = config.getUsername();
-				GuardedString guardedPassword = config.getPassword();
-				final StringBuilder passwordBuilder = new StringBuilder();
-				guardedPassword.access(passwordBuilder::append);
+			String username = config.getUsername();
+			GuardedString passwordGuarded = config.getPassword();
+
+			if (StringUtil.isNotBlank(username) && passwordGuarded != null) {
+				StringBuilder passwordBuilder = new StringBuilder();
+				passwordGuarded.access(passwordBuilder::append);
 				String password = passwordBuilder.toString();
+
 				String auth = username + ":" + password;
-				byte[] encodedAuth = Base64.getEncoder().encode(auth.getBytes(StandardCharsets.UTF_8));
-				request.setHeader("Authorization", "Basic " + new String(encodedAuth, StandardCharsets.UTF_8));
+				String encoded = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
+				request.setHeader("Authorization", "Basic " + encoded);
+
+				LOG.ok("AUTH: Usando Basic Auth para usuario {0} - URI: {1}", username, request.getURI());
 				return;
 			} else {
-				LOG.warn("AUTH: authMethod is BASIC, but username/password are not fully configured. URI: {0}", request.getURI());
+				LOG.warn("AUTH: authMethod BASIC, pero usuario o contraseña no están configurados - URI: {0}", request.getURI());
 			}
 		}
-		LOG.warn("AUTH: No suitable authentication method configured. Request to {0} will be anonymous.", request.getURI());
+
+		// ======== Sin autenticación ========
+		if ("NONE".equalsIgnoreCase(config.getAuthMethod()) || StringUtil.isBlank(config.getAuthMethod())) {
+			LOG.ok("AUTH: Método de autenticación configurado como NONE o vacío. Enviando solicitud sin encabezado de autenticación. URI: {0}", request.getURI());
+			return;
+		}
+
+		// ======== Configuración inválida ========
+		LOG.warn("AUTH: No se pudo determinar un método de autenticación válido. Solicitud será anónima. URI: {0}", request.getURI());
 	}
+
 
 	@Override
 	public Uid create(ObjectClass objectClass, Set<Attribute> attributes, OperationOptions operationOptions) {
