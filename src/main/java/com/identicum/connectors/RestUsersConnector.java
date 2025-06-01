@@ -345,7 +345,6 @@ public class RestUsersConnector
 		LOG.warn("AUTH: No se pudo determinar un método de autenticación válido. Solicitud será anónima. URI: {0}", request.getURI());
 	}
 
-
 	@Override
 	public Uid create(ObjectClass objectClass, Set<Attribute> attributes, OperationOptions operationOptions) {
 		String endpointSuffix; ObjectClassInfo oci; Map<String, AttributeMetadata> metadataMap; Set<String> managedNames;
