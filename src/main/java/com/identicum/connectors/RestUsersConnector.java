@@ -34,20 +34,18 @@ import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 // Los imports para PagedResultsCookie y PagedResultsHandler han sido eliminados
 
 @ConnectorClass(displayNameKey = "connector.identicum.rest.display", configurationClass = RestUsersConfiguration.class)
 public class RestUsersConnector
 		extends AbstractRestConnector<RestUsersConfiguration>
 		implements CreateOp, UpdateOp, SchemaOp, SearchOp<RestUsersFilter>, DeleteOp, TestOp {
+
+	private RestUsersConfiguration configuration;
+	// === Campos para manejo del token OAuth2 ===
+	private String oauthAccessToken;
+	private long oauthTokenExpiryEpoch = 0L;
 
 	private static final Log LOG = Log.getLog(RestUsersConnector.class);
 
@@ -349,48 +347,65 @@ public class RestUsersConnector
 
 	private String getFreshAuthToken() throws IOException {
 		RestUsersConfiguration config = getConfiguration();
+
+		// === Validación básica ===
 		String serviceAddr = config.getServiceAddress();
 		String clientId = config.getClientId();
 		GuardedString clientSecretGuarded = config.getClientSecret();
 
 		if (StringUtil.isBlank(serviceAddr) || StringUtil.isBlank(clientId) || clientSecretGuarded == null) {
-			LOG.error("AUTH_OAUTH: Service Address, Client ID or Client Secret not configured for OAuth2.");
-			throw new ConfigurationException("Service Address, Client ID, and Client Secret must be configured for OAuth2.");
+			LOG.error("AUTH_OAUTH: Parámetros de OAuth2 incompletos: serviceAddress, clientId o clientSecret.");
+			throw new ConfigurationException("Debe configurar correctamente Service Address, Client ID y Client Secret para usar OAuth2.");
 		}
+
+		// === Extracción segura del clientSecret ===
 		final StringBuilder secretBuilder = new StringBuilder();
 		clientSecretGuarded.access(secretBuilder::append);
 		String clientSecret = secretBuilder.toString();
-		String tokenEndpoint = serviceAddr + KOHA_OAUTH_TOKEN_ENDPOINT_SUFFIX;
-		LOG.ok("AUTH_OAUTH: Getting OAuth2 token from {0}", tokenEndpoint);
+
+		// === Construcción del endpoint y la petición ===
+		String tokenEndpoint = serviceAddr + KOHA_OAUTH_TOKEN_ENDPOINT_SUFFIX; // asegúrate que este valor sea "/oauth/token"
+		LOG.ok("AUTH_OAUTH: Solicitando token OAuth2 a {0}", tokenEndpoint);
+
 		HttpPost tokenRequest = new HttpPost(tokenEndpoint);
-		List<NameValuePair> params = new ArrayList<>();
-		params.add(new BasicNameValuePair("grant_type", "client_credentials"));
-		params.add(new BasicNameValuePair("client_id", clientId));
-		params.add(new BasicNameValuePair("client_secret", clientSecret));
+		List<NameValuePair> params = Arrays.asList(
+				new BasicNameValuePair("grant_type", "client_credentials"),
+				new BasicNameValuePair("client_id", clientId),
+				new BasicNameValuePair("client_secret", clientSecret)
+		);
+
 		tokenRequest.setEntity(new UrlEncodedFormEntity(params, StandardCharsets.UTF_8));
 		tokenRequest.setHeader("Content-Type", "application/x-www-form-urlencoded");
 		tokenRequest.setHeader("Accept", "application/json");
-		String responseBodyForErrorLog = "N/A (Could not read)";
+
+		// === Ejecución de la petición ===
+		String responseBodyForErrorLog = "N/A";
 		try (CloseableHttpResponse response = getHttpClient().execute(tokenRequest)) {
 			int statusCode = response.getStatusLine().getStatusCode();
 			HttpEntity entity = response.getEntity();
-			String responseBody = entity != null ? EntityUtils.toString(entity) : null;
+			String responseBody = entity != null ? EntityUtils.toString(entity, StandardCharsets.UTF_8) : null;
 			responseBodyForErrorLog = responseBody;
 
 			if (statusCode >= 200 && statusCode < 300) {
 				JSONObject jsonResponse = new JSONObject(responseBody);
-				String obtainedToken = jsonResponse.getString("access_token");
-				LOG.ok("AUTH_OAUTH: Successfully obtained OAuth2 access token.");
-				return obtainedToken;
+				if (jsonResponse.has("access_token")) {
+					String obtainedToken = jsonResponse.getString("access_token");
+					LOG.ok("AUTH_OAUTH: Token obtenido exitosamente.");
+					return obtainedToken;
+				} else {
+					LOG.error("AUTH_OAUTH: Respuesta JSON no contiene 'access_token': {0}", responseBody);
+					throw new ConnectorIOException("Token OAuth2 no encontrado en la respuesta.");
+				}
 			} else {
-				LOG.error("AUTH_OAUTH: Failed to obtain OAuth2 token. Status: {0}, Body: {1}", statusCode, responseBody);
-				throw new ConnectorIOException("Failed to obtain OAuth2 token: " + statusCode + " - " + responseBody);
+				LOG.error("AUTH_OAUTH: Falló la obtención del token. Status: {0}, Respuesta: {1}", statusCode, responseBody);
+				throw new ConnectorIOException("Error al obtener token OAuth2. Código: " + statusCode);
 			}
 		} catch (JSONException e) {
-			LOG.error("AUTH_OAUTH: Error parsing JSON response from token endpoint. Body: {0}", responseBodyForErrorLog, e);
-			throw new ConnectorException("Error parsing JSON response from token endpoint: " + e.getMessage(), e);
+			LOG.error("AUTH_OAUTH: Error interpretando JSON. Respuesta: {0}", responseBodyForErrorLog, e);
+			throw new ConnectorException("Error procesando respuesta JSON del token endpoint: " + e.getMessage(), e);
 		}
 	}
+
 
 	private void addAuthHeader(HttpRequestBase request) throws IOException {
 		RestUsersConfiguration config = getConfiguration();
