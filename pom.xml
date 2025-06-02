@@ -24,10 +24,11 @@
 	</properties>
 
 	<dependencies>
+		<!-- https://mvnrepository.com/artifact/com.evolveum.polygon/connector-rest -->
 		<dependency>
 			<groupId>com.evolveum.polygon</groupId>
 			<artifactId>connector-rest</artifactId>
-			<version>1.4.2.14-SNAPSHOT</version>
+			<version>1.4.2.35</version>
 		</dependency>
 		<dependency>
 			<groupId>org.json</groupId>
