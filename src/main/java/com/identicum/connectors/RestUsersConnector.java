@@ -473,7 +473,7 @@ public class RestUsersConnector
 		try {
 			return URLEncoder.encode(s, StandardCharsets.UTF_8.name());
 		} catch (UnsupportedEncodingException e) {
-			throw new ConnectorRuntimeException("UTF-8 encoding not supported, this should not happen.", e);
+			throw new ConnectorException("UTF-8 encoding not supported, this should not happen.", e);
 		}
 	}
 
