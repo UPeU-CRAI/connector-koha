@@ -184,66 +184,161 @@ public class RestUsersConnector
 	@Override
 	public Schema schema() {
 		if (this.connectorSchema != null) return this.connectorSchema;
+
 		LOG.ok("Building schema for Koha Connector");
 		SchemaBuilder schemaBuilder = new SchemaBuilder(RestUsersConnector.class);
+
+		// ========= PATRONS (ACCOUNT) ==========
 		ObjectClassInfoBuilder accountBuilder = new ObjectClassInfoBuilder();
 		accountBuilder.setType(ObjectClass.ACCOUNT_NAME);
 		Set<String> accountAttrsDefined = new HashSet<>();
-		accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(Uid.NAME).setNativeName(KOHA_PATRON_ID_NATIVE_NAME).setType(String.class).setRequired(true).setCreateable(false).setUpdateable(false).setReadable(true).build());
+
+		// UID (patron ID)
+		accountBuilder.addAttributeInfo(
+				AttributeInfoBuilder.define(Uid.NAME)
+						.setNativeName(KOHA_PATRON_ID_NATIVE_NAME)
+						.setType(String.class)
+						.setRequired(true)
+						.setCreateable(false)
+						.setUpdateable(false)
+						.setReadable(true)
+						.build()
+		);
 		accountAttrsDefined.add(Uid.NAME);
+
+		// NAME (usually userid)
 		AttributeMetadata nameAttrMeta = KOHA_PATRON_ATTRIBUTE_METADATA.get(ATTR_USERID);
-		if (nameAttrMeta != null) {
-			accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(Name.NAME).setNativeName(nameAttrMeta.kohaNativeName).setType(nameAttrMeta.type).setRequired(true)
-					.setCreateable(!nameAttrMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!nameAttrMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
-					.setReadable(!nameAttrMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
+		if (nameAttrMeta != null && !accountAttrsDefined.contains(Name.NAME)) {
+			accountBuilder.addAttributeInfo(
+					AttributeInfoBuilder.define(Name.NAME)
+							.setNativeName(nameAttrMeta.kohaNativeName)
+							.setType(nameAttrMeta.type)
+							.setRequired(true)
+							.setCreateable(!nameAttrMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE))
+							.setUpdateable(!nameAttrMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
+							.setReadable(!nameAttrMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE))
+							.build()
+			);
 			accountAttrsDefined.add(Name.NAME);
 		}
+
+		// Patron attributes
 		for (String connIdAttrName : MANAGED_KOHA_PATRON_CONNID_NAMES) {
 			if (accountAttrsDefined.contains(connIdAttrName)) continue;
 			AttributeMetadata meta = KOHA_PATRON_ATTRIBUTE_METADATA.get(connIdAttrName);
 			if (meta != null) {
-				accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(meta.connIdName).setNativeName(meta.kohaNativeName).setType(meta.type)
-						.setRequired(meta.flags.contains(AttributeMetadata.Flags.REQUIRED)).setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
-						.setCreateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
-						.setReadable(!meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
+				accountBuilder.addAttributeInfo(
+						AttributeInfoBuilder.define(meta.connIdName)
+								.setNativeName(meta.kohaNativeName)
+								.setType(meta.type)
+								.setRequired(meta.flags.contains(AttributeMetadata.Flags.REQUIRED))
+								.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
+								.setCreateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE))
+								.setUpdateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
+								.setReadable(!meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE))
+								.build()
+				);
 				accountAttrsDefined.add(meta.connIdName);
-			} else { LOG.warn("Schema: Metadata not found for managed patron attribute '{0}'. Skipping.", connIdAttrName); }
+			} else {
+				LOG.warn("Schema: Metadata not found for managed patron attribute '{0}'. Skipping.", connIdAttrName);
+			}
 		}
+
+		// Patron attributes (read-only extras)
 		KOHA_PATRON_ATTRIBUTE_METADATA.forEach((connIdName, meta) -> {
-			if (!accountAttrsDefined.contains(connIdName) && meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE) && meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)) {
-				accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(meta.connIdName).setNativeName(meta.kohaNativeName).setType(meta.type)
-						.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED)).setCreateable(false).setUpdateable(false).setReadable(true).build());
-				accountAttrsDefined.add(meta.connIdName);
+			if (!accountAttrsDefined.contains(connIdName)
+					&& meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)
+					&& meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)) {
+				accountBuilder.addAttributeInfo(
+						AttributeInfoBuilder.define(meta.connIdName)
+								.setNativeName(meta.kohaNativeName)
+								.setType(meta.type)
+								.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
+								.setCreateable(false)
+								.setUpdateable(false)
+								.setReadable(true)
+								.build()
+				);
+				accountAttrsDefined.add(connIdName);
 			}
 		});
+
 		schemaBuilder.defineObjectClass(accountBuilder.build());
+
+		// ========== CATEGORIES (GROUP) ==========
 		ObjectClassInfoBuilder groupBuilder = new ObjectClassInfoBuilder();
 		groupBuilder.setType(ObjectClass.GROUP_NAME);
 		Set<String> groupAttrsDefined = new HashSet<>();
-		groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(Uid.NAME).setNativeName(KOHA_CATEGORY_ID_NATIVE_NAME).setType(String.class).setRequired(true).setCreateable(false).setUpdateable(false).setReadable(true).build());
+
+		// UID for group
+		groupBuilder.addAttributeInfo(
+				AttributeInfoBuilder.define(Uid.NAME)
+						.setNativeName(KOHA_CATEGORY_ID_NATIVE_NAME)
+						.setType(String.class)
+						.setRequired(true)
+						.setCreateable(false)
+						.setUpdateable(false)
+						.setReadable(true)
+						.build()
+		);
 		groupAttrsDefined.add(Uid.NAME);
+
+		// NAME for group (mapped only if not duplicated)
 		AttributeMetadata groupNameMeta = KOHA_CATEGORY_ATTRIBUTE_METADATA.get(ATTR_CATEGORY_DESCRIPTION);
-		if (groupNameMeta != null) {
-			groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(Name.NAME).setNativeName(groupNameMeta.kohaNativeName).setType(groupNameMeta.type).setRequired(true)
-					.setCreateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
-					.setReadable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
+		if (groupNameMeta != null && !"description".equalsIgnoreCase(groupNameMeta.connIdName)) {
+			groupBuilder.addAttributeInfo(
+					AttributeInfoBuilder.define(Name.NAME)
+							.setNativeName(groupNameMeta.kohaNativeName)
+							.setType(groupNameMeta.type)
+							.setRequired(true)
+							.setCreateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE))
+							.setUpdateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
+							.setReadable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE))
+							.build()
+			);
 			groupAttrsDefined.add(Name.NAME);
+		} else {
+			LOG.warn("Schema: Skipping Name.NAME mapping for 'description' to avoid duplication.");
 		}
+
+		// Category attributes
 		for (String connIdAttrName : MANAGED_KOHA_CATEGORY_CONNID_NAMES) {
 			if (groupAttrsDefined.contains(connIdAttrName)) continue;
 			AttributeMetadata meta = KOHA_CATEGORY_ATTRIBUTE_METADATA.get(connIdAttrName);
 			if (meta != null) {
-				groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(meta.connIdName).setNativeName(meta.kohaNativeName).setType(meta.type)
-						.setRequired(meta.flags.contains(AttributeMetadata.Flags.REQUIRED)).setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
-						.setCreateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
-						.setReadable(!meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
+				groupBuilder.addAttributeInfo(
+						AttributeInfoBuilder.define(meta.connIdName)
+								.setNativeName(meta.kohaNativeName)
+								.setType(meta.type)
+								.setRequired(meta.flags.contains(AttributeMetadata.Flags.REQUIRED))
+								.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
+								.setCreateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE))
+								.setUpdateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
+								.setReadable(!meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE))
+								.build()
+				);
 				groupAttrsDefined.add(meta.connIdName);
-			} else { LOG.warn("Schema: Metadata not found for managed category attribute '{0}'. Skipping.", connIdAttrName); }
+			} else {
+				LOG.warn("Schema: Metadata not found for managed category attribute '{0}'. Skipping.", connIdAttrName);
+			}
 		}
+
+		// Read-only category attributes
 		KOHA_CATEGORY_ATTRIBUTE_METADATA.forEach((connIdName, meta) -> {
-			if (!groupAttrsDefined.contains(connIdName) && meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE) && meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)) {
-				groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(meta.connIdName).setNativeName(meta.kohaNativeName).setType(meta.type)
-						.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED)).setCreateable(false).setUpdateable(false).setReadable(true).build());
+			if (!groupAttrsDefined.contains(connIdName)
+					&& meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)
+					&& meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)) {
+				groupBuilder.addAttributeInfo(
+						AttributeInfoBuilder.define(meta.connIdName)
+								.setNativeName(meta.kohaNativeName)
+								.setType(meta.type)
+								.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
+								.setCreateable(false)
+								.setUpdateable(false)
+								.setReadable(true)
+								.build()
+				);
+				groupAttrsDefined.add(connIdName);
 			}
 		});
 		schemaBuilder.defineObjectClass(groupBuilder.build());
