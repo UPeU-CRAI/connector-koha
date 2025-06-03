@@ -217,6 +217,7 @@ public class RestUsersConnector
 		if (accountNameMeta != null) {
 			accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(Name.NAME).setNativeName(accountNameMeta.kohaNativeName).setType(accountNameMeta.type).setRequired(accountNameMeta.flags.contains(AttributeMetadata.Flags.REQUIRED)).setCreateable(!accountNameMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!accountNameMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)).setReadable(!accountNameMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
 			accountAttrsDefined.add(Name.NAME);
+			accountAttrsDefined.add(ATTR_USERID);
 		}
 		KOHA_PATRON_ATTRIBUTE_METADATA.forEach((connIdName, meta) -> {
 			if (accountAttrsDefined.contains(connIdName)) return;
