@@ -18,7 +18,7 @@ import org.apache.http.util.EntityUtils;
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.common.security.GuardedString;
-import org.identityconnectors.framework.common.exceptions.*; // Cubre ConnectorRuntimeException y otras
+import org.identityconnectors.framework.common.exceptions.*; // Import general para excepciones de ConnId
 import org.identityconnectors.framework.common.objects.*;
 import org.identityconnectors.framework.common.objects.filter.FilterTranslator;
 import org.identityconnectors.framework.spi.ConnectorClass;
@@ -49,8 +49,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import static javax.security.auth.login.Configuration.getConfiguration;
+// El import estático incorrecto "static javax.security.auth.login.Configuration.getConfiguration;" ha sido eliminado.
+// Se usará el método getConfiguration() heredado de AbstractConnector.
 
 @ConnectorClass(displayNameKey = "connector.identicum.rest.display", configurationClass = RestUsersConfiguration.class)
 public class RestUsersConnector
@@ -66,6 +66,10 @@ public class RestUsersConnector
 	private static final int TOKEN_EXPIRY_BUFFER_SECONDS = 60;
 
 	// --- API Path Constants ---
+	// CORREGIDO según la aclaración del usuario:
+	// Si serviceAddress es http://192.168.15.135:8000
+	// y el endpoint de patrons es http://192.168.15.135:8000/api/v1/patrons
+	// entonces API_BASE_PATH debe ser "/api/v1"
 	private static final String API_BASE_PATH = "/api/v1";
 	private static final String PATRONS_ENDPOINT_SUFFIX = "/patrons";
 	private static final String CATEGORIES_ENDPOINT_SUFFIX = "/patron_categories";
@@ -168,7 +172,7 @@ public class RestUsersConnector
 	)));
 	private static final Map<String, AttributeMetadata> KOHA_CATEGORY_ATTRIBUTE_METADATA = new HashMap<>();
 	static {
-		KOHA_CATEGORY_ATTRIBUTE_METADATA.put(ATTR_CATEGORY_DESCRIPTION, new AttributeMetadata(ATTR_CATEGORY_DESCRIPTION, "name", String.class, AttributeMetadata.Flags.REQUIRED)); // Koha API uses "name" for description
+		KOHA_CATEGORY_ATTRIBUTE_METADATA.put(ATTR_CATEGORY_DESCRIPTION, new AttributeMetadata(ATTR_CATEGORY_DESCRIPTION, "name", String.class, AttributeMetadata.Flags.REQUIRED));
 		KOHA_CATEGORY_ATTRIBUTE_METADATA.put(ATTR_CATEGORY_TYPE, new AttributeMetadata(ATTR_CATEGORY_TYPE, "category_type", String.class));
 		KOHA_CATEGORY_ATTRIBUTE_METADATA.put(ATTR_CATEGORY_ENROLMENT_PERIOD, new AttributeMetadata(ATTR_CATEGORY_ENROLMENT_PERIOD, "enrolment_period", String.class));
 	}
@@ -196,7 +200,7 @@ public class RestUsersConnector
 			if (currentConfig.getClientSecret() == null) {
 				throw new ConfigurationException("Client Secret must be configured for OAuth2.");
 			}
-			if (StringUtil.isBlank(currentConfig.getTokenUrlSuffix())) { // Assumes RestUsersConfiguration has getTokenUrlSuffix()
+			if (StringUtil.isBlank(currentConfig.getTokenUrlSuffix())) {
 				throw new ConfigurationException("Token URL Suffix must be configured for OAuth2 (e.g., /api/v1/oauth/token).");
 			}
 		}
@@ -211,16 +215,21 @@ public class RestUsersConnector
 		ObjectClassInfoBuilder accountBuilder = new ObjectClassInfoBuilder();
 		accountBuilder.setType(ObjectClass.ACCOUNT_NAME);
 		Set<String> accountAttrsDefined = new HashSet<>();
+
 		accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(Uid.NAME).setNativeName(KOHA_PATRON_ID_NATIVE_NAME).setType(String.class).setRequired(true).setCreateable(false).setUpdateable(false).setReadable(true).build());
 		accountAttrsDefined.add(Uid.NAME);
+
 		AttributeMetadata accountNameMeta = KOHA_PATRON_ATTRIBUTE_METADATA.get(ATTR_USERID);
 		if (accountNameMeta != null) {
 			accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(Name.NAME).setNativeName(accountNameMeta.kohaNativeName).setType(accountNameMeta.type).setRequired(accountNameMeta.flags.contains(AttributeMetadata.Flags.REQUIRED)).setCreateable(!accountNameMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!accountNameMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)).setReadable(!accountNameMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
 			accountAttrsDefined.add(Name.NAME);
-			accountAttrsDefined.add(ATTR_USERID);
+			accountAttrsDefined.add(ATTR_USERID); // Marcar ATTR_USERID como definido
 		}
+
 		KOHA_PATRON_ATTRIBUTE_METADATA.forEach((connIdName, meta) -> {
-			if (accountAttrsDefined.contains(connIdName)) return;
+			if (accountAttrsDefined.contains(connIdName)) {
+				return;
+			}
 			accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(meta.connIdName).setNativeName(meta.kohaNativeName).setType(meta.type).setRequired(meta.flags.contains(AttributeMetadata.Flags.REQUIRED)).setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED)).setCreateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)).setReadable(!meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
 		});
 		schemaBuilder.defineObjectClass(accountBuilder.build());
@@ -234,6 +243,7 @@ public class RestUsersConnector
 		if (groupNameMeta != null) {
 			groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(Name.NAME).setNativeName(groupNameMeta.kohaNativeName).setType(groupNameMeta.type).setRequired(groupNameMeta.flags.contains(AttributeMetadata.Flags.REQUIRED)).setCreateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)).setReadable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
 			groupAttrsDefined.add(Name.NAME);
+			groupAttrsDefined.add(ATTR_CATEGORY_DESCRIPTION); // Marcar ATTR_CATEGORY_DESCRIPTION como definido
 		}
 		KOHA_CATEGORY_ATTRIBUTE_METADATA.forEach((connIdName, meta) -> {
 			if (groupAttrsDefined.contains(connIdName)) return;
@@ -638,13 +648,23 @@ public class RestUsersConnector
 	@Override
 	public void test() {
 		LOG.info("TEST: Starting Koha connection test...");
-		String testEndpoint = getConfiguration().getServiceAddress() + API_BASE_PATH + PATRONS_ENDPOINT_SUFFIX + "?_per_page=1&_page=1";
+		String serviceAddress = getConfiguration().getServiceAddress();
+		String effectiveApiBasePath = API_BASE_PATH;
+
+		if (serviceAddress.endsWith("/") && effectiveApiBasePath.startsWith("/")) {
+			effectiveApiBasePath = effectiveApiBasePath.substring(1);
+		} else if (!serviceAddress.endsWith("/") && !effectiveApiBasePath.startsWith("/") && !effectiveApiBasePath.isEmpty()) {
+			// No action needed here if API_BASE_PATH always starts with / and serviceAddress does not end with /
+		}
+
+		String testEndpoint = serviceAddress + effectiveApiBasePath + PATRONS_ENDPOINT_SUFFIX + "?_per_page=1&_page=1";
+		LOG.info("TEST: Constructed test endpoint: {0}", testEndpoint);
 		HttpGet request = new HttpGet(testEndpoint);
 		try {
 			callRequest(request);
 			LOG.info("TEST: Connection test successful to: {0}", testEndpoint);
 		} catch (Exception e) {
-			LOG.error("TEST: Connection test failed for: {0}. Error: {1}", testEndpoint, e.getMessage(), e);
+			LOG.error("TEST: Connection test FAILED for: {0}. Error: {1}", testEndpoint, e.getMessage(), e);
 			if (e instanceof ConnectorException) throw (ConnectorException) e;
 			throw new ConnectorIOException("Connection test failed: " + e.getMessage(), e);
 		}

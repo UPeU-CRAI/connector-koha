@@ -10,25 +10,52 @@
 		  xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3"
 		  xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3">
 
-	<name>Koha REST Connector</name> <connectorRef type="ConnectorType">
-	<filter>
-		<q:and>
-			<q:equal>
-				<q:path>c:connectorType</q:path>
-				<q:value>com.identicum.connectors.RestUsersConnector</q:value>
-			</q:equal>
-			<q:equal>
-				<q:path>c:connectorVersion</q:path>
-				<q:value>0.0.2-SNAPSHOT</q:value> </q:equal>
-		</q:and>
-	</filter>
-</connectorRef>
+	<name>Koha REST Connector</name>
+
+	<connectorRef type="ConnectorType">
+		<filter>
+			<q:and>
+				<q:equal>
+					<q:path>c:connectorType</q:path>
+					<q:value>com.identicum.connectors.RestUsersConnector</q:value>
+				</q:equal>
+				<q:equal>
+					<q:path>c:connectorVersion</q:path>
+					<q:value>0.0.2-SNAPSHOT</q:value>
+				</q:equal>
+			</q:and>
+		</filter>
+	</connectorRef>
 
 	<connectorConfiguration>
 		<icfc:configurationProperties>
-			<cfg:serviceAddress>http://192.168.15.135:8000</cfg:serviceAddress> <cfg:authMethod>BASIC</cfg:authMethod>
+			<!--
+                IMPORTANTE: serviceAddress debe ser la URL base de tu servidor Koha.
+                Ej: http://koha.example.com o http://192.168.15.135:8080 (si Koha no corre en el puerto 80).
+                NO incluyas /api/v1 aquí si tu conector Java (API_BASE_PATH) ya lo añade.
+                Si tus logs de Koha muestran /api/v1/app.pl/api/v1/..., entonces serviceAddress
+                probablemente debería ser http://192.168.15.135:8000 (o el puerto correcto de Koha)
+                y API_BASE_PATH en el conector debería ser "/api/v1/app.pl" o ajustar esto aquí.
+                Para el log que mostraste "GET /api/v1/app.pl/api/v1/patrons",
+                si serviceAddress es "http://192.168.15.135:8000" y API_BASE_PATH es "/api/v1",
+                la URL construida sería "http://192.168.15.135:8000/api/v1/patrons".
+                El "/app.pl/" extra en tu log de Koha es peculiar. Verifica tu configuración de Koha (Apache/Nginx proxy).
+                Por ahora, se asume que la URL base correcta para que el conector forme la URL de API es la siguiente:
+            -->
+			<cfg:serviceAddress>http://192.168.15.135:8000</cfg:serviceAddress>
+
+			<cfg:authMethod>BASIC</cfg:authMethod>
 			<cfg:username>koha_api_user</cfg:username> <cfg:password>
 			<t:clearValue>koha_api_password</t:clearValue> </cfg:password>
+
+			<!--
+            <cfg:authMethod>OAUTH2_KOHA_CLIENT_CREDENTIALS</cfg:authMethod>
+            <cfg:clientId>TU_CLIENT_ID_DE_KOHA</cfg:clientId>
+            <cfg:clientSecret>
+                <t:clearValue>TU_CLIENT_SECRET_DE_KOHA</t:clearValue>
+            </cfg:clientSecret>
+            <cfg:tokenUrlSuffix>/api/v1/oauth/token</cfg:tokenUrlSuffix> <!- Este es el valor por defecto en RestUsersConfiguration.java ->
+            -->
 
 			<cfg:trustAllCertificates>true</cfg:trustAllCertificates> </icfc:configurationProperties>
 	</connectorConfiguration>
@@ -50,15 +77,15 @@
 					<xsd:annotation>
 						<xsd:appinfo>
 							<ra:resourceObject/>
-							<ra:identifier>icfs:uid</ra:identifier> <ra:secondaryIdentifier>icfs:name</ra:secondaryIdentifier> <ra:displayNameAttribute>tns:surname</ra:displayNameAttribute> <ra:namingAttribute>icfs:name</ra:namingAttribute> <ra:nativeObjectClass>__ACCOUNT__</ra:nativeObjectClass>
+							<ra:identifier>icfs:uid</ra:identifier> <ra:secondaryIdentifier>icfs:name</ra:secondaryIdentifier> <ra:displayNameAttribute>tns:surname</ra:displayNameAttribute>
+							<ra:namingAttribute>icfs:name</ra:namingAttribute> <ra:nativeObjectClass>__ACCOUNT__</ra:nativeObjectClass>
 							<ra:account/>
 							<ra:default/>
 						</xsd:appinfo>
 					</xsd:annotation>
 					<xsd:sequence>
 						<xsd:element ref="icfs:uid"/>
-						<xsd:element ref="icfs:name"/>
-						<xsd:element name="cardnumber" type="xsd:string" minOccurs="0"/>
+						<xsd:element ref="icfs:name"/> <xsd:element name="cardnumber" type="xsd:string" minOccurs="0"/>
 						<xsd:element name="surname" type="xsd:string" minOccurs="0"/>
 						<xsd:element name="firstname" type="xsd:string" minOccurs="0"/>
 						<xsd:element name="email" type="xsd:string" minOccurs="0"/>
@@ -68,7 +95,7 @@
 						<xsd:element name="date_of_birth" type="xsd:string" minOccurs="0"/>
 						<xsd:element name="expiry_date" type="xsd:string" minOccurs="0"/>
 						<xsd:element name="restricted" type="xsd:boolean" minOccurs="0"/>
-						<xsd:element name="date_enrolled" type="xsd:string" minOccurs="0" >
+						<xsd:element name="date_enrolled" type="xsd:string" minOccurs="0">
 							<xsd:annotation><xsd:appinfo><a:readonly/></xsd:appinfo></xsd:annotation>
 						</xsd:element>
 						<xsd:element name="expired" type="xsd:boolean" minOccurs="0">
@@ -105,15 +132,13 @@
 			<kind>account</kind>
 			<intent>default</intent>
 			<displayName>Koha Patron Account</displayName>
-			<objectClass>tns:AccountObjectClass</objectClass> <default>true</default>
+			<objectClass>tns:AccountObjectClass</objectClass>
+			<default>true</default>
 
 			<attribute>
 				<ref>icfs:name</ref> <displayName>User ID (Login)</displayName>
-				<outbound>
-					<source><path>$user/name</path></source> </outbound>
-				<inbound>
-					<target><path>$user/name</path></target>
-				</inbound>
+				<outbound><source><path>$user/name</path></source></outbound>
+				<inbound><target><path>$user/name</path></target></inbound>
 			</attribute>
 			<attribute>
 				<ref>tns:surname</ref>
@@ -133,7 +158,8 @@
 			<attribute>
 				<ref>tns:cardnumber</ref>
 				<displayName>Card Number</displayName>
-				<outbound><source><path>$user/employeeNumber</path></source></outbound> <inbound><target><path>$user/employeeNumber</path></target></inbound>
+				<outbound><source><path>$user/employeeNumber</path></source></outbound>
+				<inbound><target><path>$user/employeeNumber</path></target></inbound>
 			</attribute>
 			<attribute>
 				<ref>tns:phone</ref>
@@ -154,21 +180,24 @@
 			</attribute>
 			<attribute>
 				<ref>tns:date_of_birth</ref>
-				<outbound><source><path>$user/extension/dateOfBirth</path></source></outbound> <inbound><target><path>$user/extension/dateOfBirth</path></target></inbound>
+				<outbound><source><path>$user/extension/dateOfBirth</path></source></outbound>
+				<inbound><target><path>$user/extension/dateOfBirth</path></target></inbound>
 			</attribute>
 			<attribute>
-				<ref>tns:expiry_date</ref> <outbound><source><path>$user/activation/validTo</path></source></outbound>
+				<ref>tns:expiry_date</ref>
+				<outbound><source><path>$user/activation/validTo</path></source></outbound>
 				<inbound><target><path>$user/activation/validTo</path></target></inbound>
 			</attribute>
 			<attribute>
-				<ref>tns:restricted</ref> <outbound>
-				<strength>strong</strength>
-				<expression>
-					<script>
-						<code>$focus?.activation?.administrativeStatus == 'DISABLED' || $focus?.activation?.administrativeStatus == 'ARCHIVED'</code>
-					</script>
-				</expression>
-			</outbound>
+				<ref>tns:restricted</ref>
+				<outbound>
+					<strength>strong</strength>
+					<expression>
+						<script>
+							<code>$focus?.activation?.administrativeStatus == 'DISABLED' || $focus?.activation?.administrativeStatus == 'ARCHIVED'</code>
+						</script>
+					</expression>
+				</outbound>
 			</attribute>
 
 			<attribute>
@@ -186,14 +215,15 @@
 
 			<activation>
 				<administrativeStatus>
-					<outbound/> <inbound>
-					<strength>weak</strength>
-					<expression>
-						<script>
-							<code>shadow?.attributes?.restricted == true ? false : true</code>
-						</script>
-					</expression>
-				</inbound>
+					<outbound/>
+					<inbound>
+						<strength>weak</strength>
+						<expression>
+							<script>
+								<code>shadow?.attributes?.restricted == true ? false : true</code>
+							</script>
+						</expression>
+					</inbound>
 				</administrativeStatus>
 				<validityStatus>
 					<inbound>
@@ -203,15 +233,13 @@
 								<code>
 									import java.time.LocalDate;
 									import java.time.format.DateTimeFormatter;
-									// Asume que el conector devuelve expiry_date en formato yyyy-MM-dd
 									expiryDateStr = shadow?.attributes?.expiry_date;
-									if (expiryDateStr == null) return null; // o Validity.VALID si una fecha de expiración nula significa válido indefinidamente
+									if (expiryDateStr == null) return null;
 									try {
 										expiryDate = LocalDate.parse(expiryDateStr.toString(), DateTimeFormatter.ISO_LOCAL_DATE);
 										return expiryDate.isBefore(LocalDate.now()) ? Validity.INVALID : Validity.VALID;
 									} catch (java.time.format.DateTimeParseException e) {
-										// Loggear el error o manejarlo como prefieras
-										return null; // o Validity.INVALID si no se puede parsear
+										return null;
 									}
 								</code>
 							</script>
@@ -219,19 +247,18 @@
 					</inbound>
 				</validityStatus>
 			</activation>
-
 		</objectType>
 
 		<objectType>
 			<kind>entitlement</kind>
-			<intent>group</intent> <displayName>Koha Patron Category</displayName>
+			<intent>group</intent>
+			<displayName>Koha Patron Category</displayName>
 			<objectClass>tns:GroupObjectClass</objectClass>
 			<default>true</default>
 
 			<attribute>
 				<ref>icfs:name</ref> <displayName>Category Description</displayName>
-				<inbound>
-					<target><path>name</path></target> </inbound>
+				<inbound><target><path>name</path></target></inbound>
 			</attribute>
 			<attribute>
 				<ref>tns:category_type</ref>
@@ -252,7 +279,8 @@
 			<cap:read/>
 			<cap:update/>
 			<cap:delete/>
-			<cap:activation/> </configured>
+			<cap:activation/>
+		</configured>
 	</capabilities>
 
 	<synchronization>
@@ -265,31 +293,26 @@
 			<enabled>true</enabled>
 			<correlation>
 				<q:equal>
-					<q:path>c:name</q:path> <expression>
-					<path>$account/attributes/icfs:name</path> </expression>
+					<q:path>c:name</q:path>
+					<expression>
+						<path>$account/attributes/icfs:name</path>
+					</expression>
 				</q:equal>
 			</correlation>
 			<reaction>
-				<situation>linked</situation>
-				<synchronize>true</synchronize>
+				<situation>linked</situation><synchronize>true</synchronize>
 			</reaction>
 			<reaction>
-				<situation>deleted</situation> <synchronize>true</synchronize>
-				<action>
-					<handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#unlinkAccount</handlerUri>
-				</action>
+				<situation>deleted</situation><synchronize>true</synchronize>
+				<action><handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#unlinkAccount</handlerUri></action>
 			</reaction>
 			<reaction>
-				<situation>unlinked</situation> <synchronize>true</synchronize>
-				<action>
-					<handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#linkAccount</handlerUri>
-				</action>
+				<situation>unlinked</situation><synchronize>true</synchronize>
+				<action><handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#linkAccount</handlerUri></action>
 			</reaction>
 			<reaction>
-				<situation>unmatched</situation> <synchronize>true</synchronize>
-				<action>
-					<handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#addUser</handlerUri>
-				</action>
+				<situation>unmatched</situation><synchronize>true</synchronize>
+				<action><handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#addUser</handlerUri></action>
 			</reaction>
 		</objectSynchronization>
 
@@ -297,38 +320,31 @@
 			<name>Patron Category Synchronization</name>
 			<objectClass>tns:GroupObjectClass</objectClass>
 			<kind>entitlement</kind>
-			<intent>group</intent> <focusType>c:RoleType</focusType> <enabled>true</enabled>
+			<intent>group</intent>
+			<focusType>c:RoleType</focusType>
+			<enabled>true</enabled>
 			<correlation>
 				<q:equal>
-					<q:path>c:name</q:path> <expression>
-					<path>$shadow/attributes/icfs:name</path>
-				</expression>
+					<q:path>c:name</q:path>
+					<expression>
+						<path>$shadow/attributes/icfs:name</path>
+					</expression>
 				</q:equal>
 			</correlation>
 			<reaction>
-				<situation>linked</situation>
-				<synchronize>true</synchronize>
+				<situation>linked</situation><synchronize>true</synchronize>
 			</reaction>
 			<reaction>
-				<situation>deleted</situation>
-				<synchronize>true</synchronize>
-				<action>
-					<handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#deleteFocus</handlerUri>
-				</action>
+				<situation>deleted</situation><synchronize>true</synchronize>
+				<action><handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#deleteFocus</handlerUri></action>
 			</reaction>
 			<reaction>
-				<situation>unlinked</situation>
-				<synchronize>true</synchronize>
-				<action>
-					<handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#link</handlerUri>
-				</action>
+				<situation>unlinked</situation><synchronize>true</synchronize>
+				<action><handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#link</handlerUri></action>
 			</reaction>
 			<reaction>
-				<situation>unmatched</situation>
-				<synchronize>true</synchronize>
-				<action>
-					<handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#addFocus</handlerUri>
-				</action>
+				<situation>unmatched</situation><synchronize>true</synchronize>
+				<action><handlerUri>http://midpoint.evolveum.com/xml/ns/public/model/action-3#addFocus</handlerUri></action>
 			</reaction>
 		</objectSynchronization>
 	</synchronization>
