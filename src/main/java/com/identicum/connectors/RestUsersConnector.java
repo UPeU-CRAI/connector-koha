@@ -616,29 +616,41 @@ public class RestUsersConnector
 
 
 	private ConnectorObject convertKohaJsonToConnectorObject(JSONObject kohaJson, ObjectClassInfo oci, Map<String, AttributeMetadata> metadataMap) {
-		if (kohaJson == null) return null;
+		if (kohaJson == null) {
+			return null;
+		}
 		ConnectorObjectBuilder builder = new ConnectorObjectBuilder().setObjectClass(new ObjectClass(oci.getType()));
-		String uidVal = null, nameVal = null;
 
+		// Construir todos los atributos NORMALES (no los especiales como __UID__ y __NAME__)
 		for (AttributeInfo attrInfo : oci.getAttributeInfo()) {
 			String connIdName = attrInfo.getName();
-			AttributeMetadata meta = Uid.NAME.equals(connIdName) ? new AttributeMetadata(Uid.NAME, ObjectClass.ACCOUNT_NAME.equals(oci.getType()) ? KOHA_PATRON_ID_NATIVE_NAME : KOHA_CATEGORY_ID_NATIVE_NAME, String.class) :
-					(Name.NAME.equals(connIdName) ? (ObjectClass.ACCOUNT_NAME.equals(oci.getType()) ? metadataMap.get(ATTR_USERID) : metadataMap.get(ATTR_CATEGORY_DESCRIPTION)) : metadataMap.get(connIdName));
+
+			if (Uid.NAME.equals(connIdName) || Name.NAME.equals(connIdName)) {
+				continue;
+			}
+
+			AttributeMetadata meta = metadataMap.get(connIdName);
 			if (meta == null || meta.kohaNativeName == null || (meta.flags != null && meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)) ||
-					!kohaJson.has(meta.kohaNativeName) || kohaJson.isNull(meta.kohaNativeName)) continue;
+					!kohaJson.has(meta.kohaNativeName) || kohaJson.isNull(meta.kohaNativeName)) {
+				continue;
+			}
 
 			Object kohaNativeVal = kohaJson.get(meta.kohaNativeName);
 			Object connIdVal = convertKohaValueToConnIdValue(kohaNativeVal, meta.type, meta.connIdName);
-			if (connIdVal == null) continue;
+			if (connIdVal == null) {
+				continue;
+			}
 
 			if (attrInfo.isMultiValued()) {
 				if (kohaNativeVal instanceof JSONArray) {
 					List<Object> multiVals = new ArrayList<>();
-					((JSONArray)kohaNativeVal).forEach(item -> {
+					((JSONArray) kohaNativeVal).forEach(item -> {
 						Object convItem = convertKohaValueToConnIdValue(item, meta.type, meta.connIdName);
 						if (convItem != null) multiVals.add(convItem);
 					});
-					if (!multiVals.isEmpty()) builder.addAttribute(AttributeBuilder.build(meta.connIdName, multiVals));
+					if (!multiVals.isEmpty()) {
+						builder.addAttribute(AttributeBuilder.build(meta.connIdName, multiVals));
+					}
 				} else {
 					builder.addAttribute(AttributeBuilder.build(meta.connIdName, Collections.singletonList(connIdVal)));
 				}
@@ -646,22 +658,30 @@ public class RestUsersConnector
 				builder.addAttribute(AttributeBuilder.build(meta.connIdName, connIdVal));
 			}
 		}
-		uidVal = ObjectClass.ACCOUNT_NAME.equals(oci.getType()) ? kohaJson.optString(KOHA_PATRON_ID_NATIVE_NAME) : kohaJson.optString(KOHA_CATEGORY_ID_NATIVE_NAME);
-		AttributeMetadata nameMeta = ObjectClass.ACCOUNT_NAME.equals(oci.getType()) ? metadataMap.get(ATTR_USERID) : metadataMap.get(ATTR_CATEGORY_DESCRIPTION);
-		if (nameMeta != null) {
-			nameVal = kohaJson.optString(nameMeta.kohaNativeName);
+
+		// Añadir los identificadores especiales __UID__ y __NAME__ UNA SOLA VEZ.
+		String uidVal = kohaJson.optString(KOHA_PATRON_ID_NATIVE_NAME);
+		String nameVal = null;
+		if (ObjectClass.ACCOUNT.is(oci.getType())) {
+			nameVal = kohaJson.optString(KOHA_PATRON_ATTRIBUTE_METADATA.get(ATTR_USERID).kohaNativeName);
+		} else if (ObjectClass.GROUP.is(oci.getType())) {
+			nameVal = kohaJson.optString(KOHA_CATEGORY_ATTRIBUTE_METADATA.get(ATTR_CATEGORY_DESCRIPTION).kohaNativeName);
 		}
+
 		if (StringUtil.isBlank(uidVal)) {
 			LOG.error("CONVERT_JSON: Se encontró un registro sin UID (patron_id). Se omitirá. JSON: {0}", kohaJson.toString());
 			return null; // Omite este registro para no causar un error fatal.
 		}
 		if (StringUtil.isBlank(nameVal)) {
 			// Si el nombre está en blanco, usa el UID como fallback para evitar errores.
-			LOG.warn("CONVERT_JSON: El registro con UID={0} no tiene un nombre (userid). Usando UID como nombre.", uidVal);
+			LOG.warn("CONVERT_JSON: El registro con UID={0} no tiene un nombre. Usando UID como nombre.", uidVal);
 			nameVal = uidVal;
 		}
+
+		// Establecer los identificadores en el builder.
 		builder.setUid(new Uid(uidVal));
 		builder.setName(new Name(nameVal));
+
 		return builder.build();
 	}
 
