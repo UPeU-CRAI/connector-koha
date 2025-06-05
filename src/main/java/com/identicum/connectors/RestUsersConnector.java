@@ -2,6 +2,7 @@ package com.identicum.connectors;
 
 import com.evolveum.polygon.rest.AbstractRestConnector;
 import org.apache.commons.codec.binary.StringUtils;
+import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
@@ -33,6 +34,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -49,6 +51,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.zip.GZIPInputStream;
 
 @ConnectorClass(displayNameKey = "connector.identicum.rest.display", configurationClass = RestUsersConfiguration.class)
 public class RestUsersConnector
@@ -520,7 +523,13 @@ public class RestUsersConnector
 				}
 				HttpGet request = new HttpGet(fullBaseUrl + "?" + String.join("&", queryParams));
 				LOG.ok("EXECUTE_QUERY: URL: {0}", request.getURI());
-				JSONArray items = new JSONArray(callRequest(request));
+				String response = callRequest(request);
+				JSONObject json = new JSONObject(response);
+				JSONArray items = json.optJSONArray("patrons");
+
+				if (items == null) {
+					throw new ConnectorException("Missing 'patrons' array in Koha response: " + response);
+				}
 				if (items.length() == 0) { moreResults = false; break; }
 				for (int i = 0; i < items.length(); i++) {
 					ConnectorObject co = convertKohaJsonToConnectorObject(items.getJSONObject(i), oci, metaMap);
@@ -626,14 +635,29 @@ public class RestUsersConnector
 
 	private String callRequest(HttpRequestBase request) throws IOException {
 		LOG.ok("HTTP_CALL_NO_ENTITY: Method={0}, URI={1}", request.getMethod(), request.getURI());
-		request.setHeader("Accept", "application/json"); addAuthHeader(request);
+		request.setHeader("Accept", "application/json");
+		request.setHeader("Accept-Encoding", "gzip"); // ✅ asegúrate de agregar esto
+
+		addAuthHeader(request);
+
 		try (CloseableHttpResponse response = execute(request)) {
 			processResponseErrors(response);
-			String result = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+
+			HttpEntity entity = response.getEntity();
+			InputStream inputStream = entity.getContent();
+
+			// ✅ Manejar compresión gzip
+			Header contentEncoding = entity.getContentEncoding();
+			if (contentEncoding != null && "gzip".equalsIgnoreCase(contentEncoding.getValue())) {
+				inputStream = new GZIPInputStream(inputStream);
+			}
+
+			String result = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
 			LOG.ok("HTTP_CALL_NO_ENTITY: Response Body for URI {0} : {1}", request.getURI(), result);
 			return result;
 		}
 	}
+
 
 	@Override
 	public void processResponseErrors(CloseableHttpResponse response) throws ConnectorIOException {
