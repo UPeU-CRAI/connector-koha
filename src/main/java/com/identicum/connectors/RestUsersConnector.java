@@ -538,13 +538,17 @@ public class RestUsersConnector
 				HttpGet request = new HttpGet(fullBaseUrl + "?" + String.join("&", queryParams));
 				LOG.ok("EXECUTE_QUERY: URL: {0}", request.getURI());
 				String response = callRequest(request);
-				JSONArray items;
+				JSONArray items = null;
 
 				try {
 					JSONObject json = new JSONObject(response);
-					items = json.optJSONArray("patrons");
+					if (ObjectClass.ACCOUNT.is(oClass.getObjectClassValue())) {
+						items = json.optJSONArray("patrons");
+					} else if (ObjectClass.GROUP.is(oClass.getObjectClassValue())) {
+						items = json.optJSONArray("patron_categories");
+					}
 					if (items == null) {
-						items = new JSONArray(response);
+						items = new JSONArray(response); // fallback para array raíz
 					}
 				} catch (JSONException e) {
 					try {
