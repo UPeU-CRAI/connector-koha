@@ -23,6 +23,30 @@ public class RestUsersConfiguration extends AbstractRestConfiguration {
         return super.getServiceAddress();
     }
 
+    @Override
+    @ConfigurationProperty(
+            displayMessageKey = "rest.config.trustAllCertificates.display",
+            helpMessageKey = "rest.config.trustAllCertificates.help",
+            order = 11)
+    public Boolean getTrustAllCertificates() {
+        return super.getTrustAllCertificates();
+    }
+
+    private String authMethod;
+
+    @ConfigurationProperty(
+            displayMessageKey = "authMethod.display",
+            helpMessageKey = "authMethod.help",
+            order = 15
+    )
+    public String getAuthMethod() {
+        return authMethod;
+    }
+
+    public void setAuthMethod(String authMethod) {
+        this.authMethod = authMethod;
+    }
+
     // === Autenticación BASIC ===
 
     @Override
@@ -70,14 +94,22 @@ public class RestUsersConfiguration extends AbstractRestConfiguration {
 
     // === Ocultar propiedades heredadas que no se usan en el formulario de configuración del conector en Midpoint ===
 
-    @Override
+    @ConfigurationProperty(
+            displayMessageKey = "tokenName.display",
+            helpMessageKey = "tokenName.help",
+            order = Integer.MAX_VALUE // para que aparezca al final, o incluso se oculte
+    )
     public String getTokenName() {
-        return null; // Oculta el campo en el UI
+        return null;
     }
 
-    @Override
+    @ConfigurationProperty(
+            displayMessageKey = "tokenValue.display",
+            helpMessageKey = "tokenValue.help",
+            order = Integer.MAX_VALUE
+    )
     public String getTokenValue() {
-        return null; // Oculta el campo en el UI
+        return null;
     }
 
 }
