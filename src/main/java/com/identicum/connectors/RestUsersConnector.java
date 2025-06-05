@@ -485,20 +485,30 @@ public class RestUsersConnector
 			throw new ConnectorException("UTF-8 encoding not supported, this should not happen.", e);
 		}
 	}
-
+	/**
+	 * Ejecuta una consulta paginada contra la API de Koha para recuperar objetos ACCOUNT (usuarios) o GROUP (categorías).
+	 * Soporta filtros por UID, nombre y correo. Maneja respuestas JSON tanto en array raíz como envueltas en objeto.
+	 */
 	@Override
 	public void executeQuery(ObjectClass oClass, RestUsersFilter filter, ResultsHandler handler, OperationOptions opts) {
 		LOG.ok("EXECUTE_QUERY: ObjectClass={0}, Filter={1}, Options={2}", oClass, filter, opts);
 		ObjectClassInfo oci = schema().findObjectClassInfo(oClass.getObjectClassValue());
 		if (oci == null) throw new ConnectorException("Unsupported query for: " + oClass);
-		String baseApiEp, fullBaseUrl; Map<String, AttributeMetadata> metaMap;
+
+		String baseApiEp, fullBaseUrl;
+		Map<String, AttributeMetadata> metaMap;
+
 		if (ObjectClass.ACCOUNT.is(oClass.getObjectClassValue())) {
-			baseApiEp = API_BASE_PATH + PATRONS_ENDPOINT_SUFFIX; metaMap = KOHA_PATRON_ATTRIBUTE_METADATA;
+			baseApiEp = API_BASE_PATH + PATRONS_ENDPOINT_SUFFIX;
+			metaMap = KOHA_PATRON_ATTRIBUTE_METADATA;
 		} else if (ObjectClass.GROUP.is(oClass.getObjectClassValue())) {
-			baseApiEp = API_BASE_PATH + CATEGORIES_ENDPOINT_SUFFIX; metaMap = KOHA_CATEGORY_ATTRIBUTE_METADATA;
+			baseApiEp = API_BASE_PATH + CATEGORIES_ENDPOINT_SUFFIX;
+			metaMap = KOHA_CATEGORY_ATTRIBUTE_METADATA;
 		} else {
-			LOG.warn("EXECUTE_QUERY: Unsupported ObjectClass {0}", oClass); return;
+			LOG.warn("EXECUTE_QUERY: Unsupported ObjectClass {0}", oClass);
+			return;
 		}
+
 		fullBaseUrl = getConfiguration().getServiceAddress() + baseApiEp;
 
 		try {
@@ -509,8 +519,11 @@ public class RestUsersConnector
 				if (co != null) handler.handle(co);
 				return;
 			}
+
 			int pageSize = opts.getPageSize() != null ? opts.getPageSize() : 100;
-			int currentPage = 1; boolean moreResults;
+			int currentPage = 1;
+			boolean moreResults = true;
+
 			do {
 				List<String> queryParams = new ArrayList<>(Arrays.asList("_per_page=" + pageSize, "_page=" + currentPage));
 				if (filter != null) {
@@ -521,26 +534,48 @@ public class RestUsersConnector
 						queryParams.add(metaMap.get(ATTR_CATEGORY_DESCRIPTION).kohaNativeName + "=" + urlEncodeUTF8(filter.getByName()));
 					}
 				}
+
 				HttpGet request = new HttpGet(fullBaseUrl + "?" + String.join("&", queryParams));
 				LOG.ok("EXECUTE_QUERY: URL: {0}", request.getURI());
 				String response = callRequest(request);
-				JSONObject json = new JSONObject(response);
-				JSONArray items = json.optJSONArray("patrons");
+				JSONArray items;
 
-				if (items == null) {
-					throw new ConnectorException("Missing 'patrons' array in Koha response: " + response);
+				try {
+					JSONObject json = new JSONObject(response);
+					items = json.optJSONArray("patrons");
+					if (items == null) {
+						items = new JSONArray(response);
+					}
+				} catch (JSONException e) {
+					try {
+						items = new JSONArray(response);
+					} catch (JSONException ex) {
+						throw new ConnectorException("Invalid JSON response from Koha: " + response, ex);
+					}
 				}
-				if (items.length() == 0) { moreResults = false; break; }
+
+				if (items.length() == 0) {
+					moreResults = false;
+					break;
+				}
+
 				for (int i = 0; i < items.length(); i++) {
 					ConnectorObject co = convertKohaJsonToConnectorObject(items.getJSONObject(i), oci, metaMap);
-					if (co != null && !handler.handle(co)) { moreResults = false; break; }
+					if (co != null && !handler.handle(co)) {
+						moreResults = false;
+						break;
+					}
 				}
-				if (moreResults = (items.length() == pageSize)) currentPage++;
+
+				moreResults = (items.length() == pageSize);
+				if (moreResults) currentPage++;
+
 			} while (moreResults);
 		} catch (IOException | JSONException e) {
 			throw new ConnectorIOException("Query failed: " + e.getMessage(), e);
 		}
 	}
+
 
 	private ConnectorObject convertKohaJsonToConnectorObject(JSONObject kohaJson, ObjectClassInfo oci, Map<String, AttributeMetadata> metadataMap) {
 		if (kohaJson == null) return null;
