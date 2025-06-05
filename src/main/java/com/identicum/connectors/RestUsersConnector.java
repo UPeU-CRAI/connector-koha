@@ -210,112 +210,88 @@ public class RestUsersConnector
 		LOG.ok("Building schema for Koha Connector...");
 		SchemaBuilder schemaBuilder = new SchemaBuilder(RestUsersConnector.class);
 
+		// --- INICIO DE LA MODIFICACIÓN ---
+
+		// --- Account Object Class (Patrons) ---
 		ObjectClassInfoBuilder accountBuilder = new ObjectClassInfoBuilder();
 		accountBuilder.setType(ObjectClass.ACCOUNT_NAME);
-		Set<String> accountAttrsDefined = new HashSet<>();
 
-		accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(Uid.NAME).setNativeName(KOHA_PATRON_ID_NATIVE_NAME).setType(String.class).setRequired(true).setCreateable(false).setUpdateable(false).setReadable(true).build());
-		accountAttrsDefined.add(Uid.NAME);
+		// Crear una copia mutable de los nombres de atributos a procesar.
+		Set<String> patronAttrNamesToProcess = new HashSet<>(KOHA_PATRON_ATTRIBUTE_METADATA.keySet());
 
+		// Definir __UID__ (Identificador único)
+		accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(Uid.NAME)
+				.setNativeName(KOHA_PATRON_ID_NATIVE_NAME).setType(String.class)
+				.setRequired(true).setCreateable(false).setUpdateable(false).setReadable(true).build());
+		patronAttrNamesToProcess.remove(Uid.NAME); // No es un atributo regular
+
+		// Definir __NAME__ (Identificador legible/login)
 		AttributeMetadata accountNameMeta = KOHA_PATRON_ATTRIBUTE_METADATA.get(ATTR_USERID);
 		if (accountNameMeta != null) {
-			accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(Name.NAME).setNativeName(accountNameMeta.kohaNativeName).setType(accountNameMeta.type).setRequired(accountNameMeta.flags.contains(AttributeMetadata.Flags.REQUIRED)).setCreateable(!accountNameMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!accountNameMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)).setReadable(!accountNameMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
-			accountAttrsDefined.add(Name.NAME);
-			accountAttrsDefined.add(ATTR_USERID); // Marcar ATTR_USERID como definido
+			accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(Name.NAME)
+					.setNativeName(accountNameMeta.kohaNativeName).setType(accountNameMeta.type)
+					.setRequired(accountNameMeta.flags.contains(AttributeMetadata.Flags.REQUIRED))
+					.setCreateable(!accountNameMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE))
+					.setUpdateable(!accountNameMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
+					.setReadable(!accountNameMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
+
+			// MUY IMPORTANTE: Remover ATTR_USERID del conjunto de atributos a procesar,
+			// ya que ahora está representado por __NAME__.
+			patronAttrNamesToProcess.remove(ATTR_USERID);
 		}
 
-		KOHA_PATRON_ATTRIBUTE_METADATA.forEach((connIdName, meta) -> {
-			if (accountAttrsDefined.contains(connIdName)) {
-				return;
-			}
-			accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(meta.connIdName).setNativeName(meta.kohaNativeName).setType(meta.type).setRequired(meta.flags.contains(AttributeMetadata.Flags.REQUIRED)).setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED)).setCreateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)).setReadable(!meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
+		// Procesar todos los demás atributos de patron
+		patronAttrNamesToProcess.forEach(connIdName -> {
+			AttributeMetadata meta = KOHA_PATRON_ATTRIBUTE_METADATA.get(connIdName);
+			accountBuilder.addAttributeInfo(AttributeInfoBuilder.define(meta.connIdName)
+					.setNativeName(meta.kohaNativeName).setType(meta.type)
+					.setRequired(meta.flags.contains(AttributeMetadata.Flags.REQUIRED))
+					.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
+					.setCreateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE))
+					.setUpdateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
+					.setReadable(!meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
 		});
 		schemaBuilder.defineObjectClass(accountBuilder.build());
 
+
+		// --- Group Object Class (Categories) ---
 		ObjectClassInfoBuilder groupBuilder = new ObjectClassInfoBuilder();
 		groupBuilder.setType(ObjectClass.GROUP_NAME);
-		Set<String> groupAttrsDefined = new HashSet<>();
-		groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(Uid.NAME).setNativeName(KOHA_CATEGORY_ID_NATIVE_NAME).setType(String.class).setRequired(true).setCreateable(false).setUpdateable(false).setReadable(true).build());
-		groupAttrsDefined.add(Uid.NAME);
+		Set<String> categoryAttrNamesToProcess = new HashSet<>(KOHA_CATEGORY_ATTRIBUTE_METADATA.keySet());
+
+		groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(Uid.NAME)
+				.setNativeName(KOHA_CATEGORY_ID_NATIVE_NAME).setType(String.class)
+				.setRequired(true).setCreateable(false).setUpdateable(false).setReadable(true).build());
+		categoryAttrNamesToProcess.remove(Uid.NAME);
+
 		AttributeMetadata groupNameMeta = KOHA_CATEGORY_ATTRIBUTE_METADATA.get(ATTR_CATEGORY_DESCRIPTION);
 		if (groupNameMeta != null) {
-			groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(Name.NAME).setNativeName(groupNameMeta.kohaNativeName).setType(groupNameMeta.type).setRequired(groupNameMeta.flags.contains(AttributeMetadata.Flags.REQUIRED)).setCreateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)).setReadable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
-			groupAttrsDefined.add(Name.NAME);
-			groupAttrsDefined.add(ATTR_CATEGORY_DESCRIPTION); // Marcar ATTR_CATEGORY_DESCRIPTION como definido
+			groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(Name.NAME)
+					.setNativeName(groupNameMeta.kohaNativeName).setType(groupNameMeta.type)
+					.setRequired(groupNameMeta.flags.contains(AttributeMetadata.Flags.REQUIRED))
+					.setCreateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE))
+					.setUpdateable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
+					.setReadable(!groupNameMeta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
+			categoryAttrNamesToProcess.remove(ATTR_CATEGORY_DESCRIPTION);
 		}
-		KOHA_CATEGORY_ATTRIBUTE_METADATA.forEach((connIdName, meta) -> {
-			if (groupAttrsDefined.contains(connIdName)) return;
-			groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(meta.connIdName).setNativeName(meta.kohaNativeName).setType(meta.type).setRequired(meta.flags.contains(AttributeMetadata.Flags.REQUIRED)).setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED)).setCreateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)).setUpdateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE)).setReadable(!meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
+
+		categoryAttrNamesToProcess.forEach(connIdName -> {
+			AttributeMetadata meta = KOHA_CATEGORY_ATTRIBUTE_METADATA.get(connIdName);
+			groupBuilder.addAttributeInfo(AttributeInfoBuilder.define(meta.connIdName)
+					.setNativeName(meta.kohaNativeName).setType(meta.type)
+					.setRequired(meta.flags.contains(AttributeMetadata.Flags.REQUIRED))
+					.setMultiValued(meta.flags.contains(AttributeMetadata.Flags.MULTIVALUED))
+					.setCreateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE))
+					.setUpdateable(!meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE))
+					.setReadable(!meta.flags.contains(AttributeMetadata.Flags.NOT_READABLE)).build());
 		});
 		schemaBuilder.defineObjectClass(groupBuilder.build());
+
+		// --- FIN DE LA MODIFICACIÓN ---
 
 		this.connectorSchema = schemaBuilder.build();
 		LOG.ok("Schema built successfully.");
 		return this.connectorSchema;
-	}
-
-	private String getValidOAuthToken() throws IOException {
-		synchronized (tokenLock) {
-			long currentTimeSeconds = System.currentTimeMillis() / 1000;
-			if (this.oauthAccessToken != null && currentTimeSeconds < (this.oauthTokenExpiryEpoch - TOKEN_EXPIRY_BUFFER_SECONDS)) {
-				LOG.ok("AUTH_OAUTH: Reusing existing OAuth2 token.");
-				return this.oauthAccessToken;
-			}
-			LOG.ok("AUTH_OAUTH: OAuth2 token is null, expired, or nearing expiry. Fetching a new token.");
-			return fetchAndCacheNewOAuthToken();
-		}
-	}
-
-	private String fetchAndCacheNewOAuthToken() throws IOException {
-		RestUsersConfiguration config = getConfiguration();
-		String serviceAddr = config.getServiceAddress();
-		String clientId = config.getClientId();
-		GuardedString clientSecretGuarded = config.getClientSecret();
-		String tokenUrlSuffix = "/api/v1/oauth/token"; // valor fijo, no configurable
-
-		if (StringUtil.isBlank(serviceAddr) || StringUtil.isBlank(clientId) || clientSecretGuarded == null || StringUtil.isBlank(tokenUrlSuffix)) {
-			throw new ConfigurationException("OAuth2 params incomplete: serviceAddress, clientId, clientSecret, or tokenUrlSuffix.");
-		}
-		final StringBuilder secretBuilder = new StringBuilder();
-		clientSecretGuarded.access(secretBuilder::append);
-		String clientSecret = secretBuilder.toString();
-		String tokenEndpoint = serviceAddr + tokenUrlSuffix;
-		LOG.ok("AUTH_OAUTH: Requesting new OAuth2 token from: {0}", tokenEndpoint);
-
-		HttpPost tokenRequest = new HttpPost(tokenEndpoint);
-		List<NameValuePair> params = Arrays.asList(
-				new BasicNameValuePair("grant_type", "client_credentials"),
-				new BasicNameValuePair("client_id", clientId),
-				new BasicNameValuePair("client_secret", clientSecret)
-		);
-		tokenRequest.setEntity(new UrlEncodedFormEntity(params, StandardCharsets.UTF_8));
-		tokenRequest.setHeader("Content-Type", "application/x-www-form-urlencoded");
-		tokenRequest.setHeader("Accept", "application/json");
-
-		try (CloseableHttpResponse response = getHttpClient().execute(tokenRequest)) {
-			int statusCode = response.getStatusLine().getStatusCode();
-			HttpEntity entity = response.getEntity();
-			String responseBody = entity != null ? EntityUtils.toString(entity, StandardCharsets.UTF_8) : null;
-
-			if (statusCode >= 200 && statusCode < 300) {
-				JSONObject jsonResponse = new JSONObject(responseBody);
-				if (jsonResponse.has("access_token")) {
-					this.oauthAccessToken = jsonResponse.getString("access_token");
-					int expiresIn = jsonResponse.optInt("expires_in", 3600);
-					this.oauthTokenExpiryEpoch = (System.currentTimeMillis() / 1000) + expiresIn;
-					LOG.ok("AUTH_OAUTH: New token obtained. Expires in {0}s. Epoch: {1}", expiresIn, this.oauthTokenExpiryEpoch);
-					return this.oauthAccessToken;
-				} else {
-					throw new ConnectorIOException("OAuth2 token not in response from " + tokenEndpoint + ". Body: " + responseBody);
-				}
-			} else {
-				LOG.error("AUTH_OAUTH: Failed to get token. Status: {0}, Body: {1}", statusCode, responseBody);
-				processResponseErrors(response);
-				throw new ConnectorIOException("Failed to get token from " + tokenEndpoint + ". Status: " + statusCode);
-			}
-		} catch (JSONException e) {
-			throw new ConnectorException("Error parsing JSON from token endpoint " + tokenEndpoint + ": " + e.getMessage(), e);
-		}
 	}
 
 	private void addAuthHeader(HttpRequestBase request) throws IOException {
@@ -614,11 +590,20 @@ public class RestUsersConnector
 		}
 		uidVal = ObjectClass.ACCOUNT_NAME.equals(oci.getType()) ? kohaJson.optString(KOHA_PATRON_ID_NATIVE_NAME) : kohaJson.optString(KOHA_CATEGORY_ID_NATIVE_NAME);
 		AttributeMetadata nameMeta = ObjectClass.ACCOUNT_NAME.equals(oci.getType()) ? metadataMap.get(ATTR_USERID) : metadataMap.get(ATTR_CATEGORY_DESCRIPTION);
-		if (nameMeta != null) nameVal = kohaJson.optString(nameMeta.kohaNativeName);
-
-		if (StringUtil.isBlank(uidVal)) { LOG.error("CONVERT_JSON: No UID for: {0}", kohaJson.toString()); return null; }
+		if (nameMeta != null) {
+			nameVal = kohaJson.optString(nameMeta.kohaNativeName);
+		}
+		if (StringUtil.isBlank(uidVal)) {
+			LOG.error("CONVERT_JSON: Se encontró un registro sin UID (patron_id). Se omitirá. JSON: {0}", kohaJson.toString());
+			return null; // Omite este registro para no causar un error fatal.
+		}
+		if (StringUtil.isBlank(nameVal)) {
+			// Si el nombre está en blanco, usa el UID como fallback para evitar errores.
+			LOG.warn("CONVERT_JSON: El registro con UID={0} no tiene un nombre (userid). Usando UID como nombre.", uidVal);
+			nameVal = uidVal;
+		}
 		builder.setUid(new Uid(uidVal));
-		builder.setName(new Name(StringUtil.isNotBlank(nameVal) ? nameVal : uidVal));
+		builder.setName(new Name(nameVal));
 		return builder.build();
 	}
 
