@@ -49,8 +49,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-// El import estático incorrecto "static javax.security.auth.login.Configuration.getConfiguration;" ha sido eliminado.
-// Se usará el método getConfiguration() heredado de AbstractConnector.
 
 @ConnectorClass(displayNameKey = "connector.identicum.rest.display", configurationClass = RestUsersConfiguration.class)
 public class RestUsersConnector
@@ -200,9 +198,6 @@ public class RestUsersConnector
 			if (currentConfig.getClientSecret() == null) {
 				throw new ConfigurationException("Client Secret must be configured for OAuth2.");
 			}
-			if (StringUtil.isBlank(currentConfig.getTokenUrlSuffix())) {
-				throw new ConfigurationException("Token URL Suffix must be configured for OAuth2 (e.g., /api/v1/oauth/token).");
-			}
 		}
 	}
 
@@ -273,7 +268,7 @@ public class RestUsersConnector
 		String serviceAddr = config.getServiceAddress();
 		String clientId = config.getClientId();
 		GuardedString clientSecretGuarded = config.getClientSecret();
-		String tokenUrlSuffix = config.getTokenUrlSuffix();
+		String tokenUrlSuffix = "/api/v1/oauth/token"; // valor fijo, no configurable
 
 		if (StringUtil.isBlank(serviceAddr) || StringUtil.isBlank(clientId) || clientSecretGuarded == null || StringUtil.isBlank(tokenUrlSuffix)) {
 			throw new ConfigurationException("OAuth2 params incomplete: serviceAddress, clientId, clientSecret, or tokenUrlSuffix.");
