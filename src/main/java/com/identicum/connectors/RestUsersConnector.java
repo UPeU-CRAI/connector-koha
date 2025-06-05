@@ -294,6 +294,64 @@ public class RestUsersConnector
 		return this.connectorSchema;
 	}
 
+	private String getValidOAuthToken() throws IOException {
+		synchronized (tokenLock) {
+			long nowEpochSeconds = System.currentTimeMillis() / 1000;
+
+			// Si ya tenemos un token válido, lo devolvemos directamente
+			if (StringUtil.isNotBlank(oauthAccessToken) &&
+					oauthTokenExpiryEpoch > nowEpochSeconds + TOKEN_EXPIRY_BUFFER_SECONDS) {
+				LOG.ok("OAUTH: Reutilizando token de acceso existente.");
+				return oauthAccessToken;
+			}
+
+			// Caso contrario, debemos obtener un nuevo token
+			LOG.ok("OAUTH: Solicitud de nuevo token de acceso...");
+
+			RestUsersConfiguration config = getConfiguration();
+			// Esta construcción de URL es una gran mejora, ¡muy bien hecho!
+			String tokenUrl = config.getServiceAddress() + API_BASE_PATH + "/oauth/token";
+
+			HttpPost tokenRequest = new HttpPost(tokenUrl);
+			tokenRequest.setHeader("Content-Type", "application/x-www-form-urlencoded");
+			tokenRequest.setHeader("Accept", "application/json");
+
+			// --- INICIO DE LA CORRECCIÓN ---
+			// Extraer el client_secret de forma segura desde el GuardedString
+			final StringBuilder secretBuilder = new StringBuilder();
+			config.getClientSecret().access(c -> secretBuilder.append(c));
+			String clientSecret = secretBuilder.toString();
+			// --- FIN DE LA CORRECCIÓN ---
+
+			List<NameValuePair> formParams = new ArrayList<>();
+			formParams.add(new BasicNameValuePair("grant_type", "client_credentials"));
+			formParams.add(new BasicNameValuePair("client_id", config.getClientId()));
+			// Usar la variable con el secreto ya extraído
+			formParams.add(new BasicNameValuePair("client_secret", clientSecret));
+
+			tokenRequest.setEntity(new UrlEncodedFormEntity(formParams, StandardCharsets.UTF_8));
+
+			try (CloseableHttpResponse response = execute(tokenRequest)) {
+				processResponseErrors(response);
+				String body = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+				JSONObject json = new JSONObject(body);
+
+				oauthAccessToken = json.getString("access_token");
+				int expiresIn = json.optInt("expires_in", 3600); // por defecto 1 hora si no se especifica
+				oauthTokenExpiryEpoch = nowEpochSeconds + expiresIn;
+
+				LOG.ok("OAUTH: Nuevo token obtenido. Expira en {0} segundos.", expiresIn);
+				return oauthAccessToken;
+			} catch (IOException | JSONException e) { // Es buena práctica ser específico con las excepciones
+				LOG.error("OAUTH: Error al obtener token: {0}", e.getMessage(), e);
+				// Limpiar el token en caso de error para forzar un reintento la próxima vez
+				this.oauthAccessToken = null;
+				this.oauthTokenExpiryEpoch = 0L;
+				throw new ConnectorIOException("OAUTH: Falló la solicitud de token: " + e.getMessage(), e);
+			}
+		}
+	}
+
 	private void addAuthHeader(HttpRequestBase request) throws IOException {
 		RestUsersConfiguration config = getConfiguration();
 		String authMethod = config.getAuthMethod();

@@ -16,20 +16,20 @@ public class RestUsersConfiguration extends AbstractRestConfiguration {
     // === API Base ===
 
     @Override
-    @ConfigurationProperty(order = 10,
+    @ConfigurationProperty(
+            displayMessageKey = "rest.config.trustAllCertificates.display",
+            helpMessageKey = "rest.config.trustAllCertificates.help",
+            order = 10)
+    public Boolean getTrustAllCertificates() {
+        return super.getTrustAllCertificates();
+    }
+
+    @Override
+    @ConfigurationProperty(order = 11,
             displayMessageKey = "serviceAddress.display",
             helpMessageKey = "serviceAddress.help")
     public String getServiceAddress() {
         return super.getServiceAddress();
-    }
-
-    @Override
-    @ConfigurationProperty(
-            displayMessageKey = "rest.config.trustAllCertificates.display",
-            helpMessageKey = "rest.config.trustAllCertificates.help",
-            order = 11)
-    public Boolean getTrustAllCertificates() {
-        return super.getTrustAllCertificates();
     }
 
     private String authMethod;
