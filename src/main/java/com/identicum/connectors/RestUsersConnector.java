@@ -410,29 +410,72 @@ public class RestUsersConnector
 		return new Uid(newUid);
 	}
 
+
+	private JSONObject getPatron(String uid) throws IOException {
+		String endpoint = getConfiguration().getServiceAddress() + API_BASE_PATH + PATRONS_ENDPOINT_SUFFIX + "/" + uid;
+		HttpGet request = new HttpGet(endpoint);
+		String responseBody = callRequest(request);
+		return new JSONObject(responseBody);
+	}
 	@Override
 	public Uid update(ObjectClass oClass, Uid uid, Set<Attribute> attrs, OperationOptions opts) {
-		String endpointSuffix; ObjectClassInfo oci; Map<String, AttributeMetadata> metaMap; Set<String> managedNames;
+		// Si no hay atributos para cambiar, no hacemos nada.
+		if (attrs == null || attrs.isEmpty()) {
+			LOG.info("UPDATE: No attributes to change for UID={0}. Returning UID.", uid.getUidValue());
+			return uid;
+		}
+
+		// Lógica para actualizar una CUENTA (Patron)
 		if (ObjectClass.ACCOUNT.is(oClass.getObjectClassValue())) {
-			endpointSuffix = PATRONS_ENDPOINT_SUFFIX; oci = schema().findObjectClassInfo(ObjectClass.ACCOUNT_NAME);
-			metaMap = KOHA_PATRON_ATTRIBUTE_METADATA; managedNames = MANAGED_KOHA_PATRON_CONNID_NAMES;
+			try {
+				// 1. LEER: Obtener el objeto completo del patron desde Koha.
+				JSONObject patronJson = getPatron(uid.getUidValue());
+				LOG.ok("UPDATE: Fetched existing patron with UID={0}", uid.getUidValue());
+
+				// 2. MODIFICAR: Construir un JSON solo con los cambios y fusionarlo.
+				ObjectClassInfo oci = schema().findObjectClassInfo(ObjectClass.ACCOUNT_NAME);
+				JSONObject changesJson = buildJsonForKoha(attrs, oci, KOHA_PATRON_ATTRIBUTE_METADATA, MANAGED_KOHA_PATRON_CONNID_NAMES, false);
+				LOG.info("UPDATE: Applying changes to patron UID={0}: {1}", uid.getUidValue(), changesJson.toString());
+
+				// Fusionar los cambios en el objeto existente.
+				for (String key : changesJson.keySet()) {
+					patronJson.put(key, changesJson.get(key));
+				}
+
+				// 3. ESCRIBIR: Enviar el objeto completo y actualizado de vuelta a Koha.
+				String endpoint = getConfiguration().getServiceAddress() + API_BASE_PATH + PATRONS_ENDPOINT_SUFFIX + "/" + uid.getUidValue();
+				HttpPut request = new HttpPut(endpoint);
+
+				callRequest(request, patronJson);
+
+				LOG.ok("UPDATE: Koha patron object updated successfully. UID={0}", uid.getUidValue());
+				return uid;
+
+			} catch (IOException e) {
+				// Este try-catch SÍ es necesario porque getPatron() puede lanzar un IOException directamente.
+				throw new ConnectorIOException("Failed to update patron in Koha for UID " + uid.getUidValue() + ": " + e.getMessage(), e);
+			}
+
+			// Lógica para actualizar un GRUPO (Patron Category)
 		} else if (ObjectClass.GROUP.is(oClass.getObjectClassValue())) {
-			endpointSuffix = CATEGORIES_ENDPOINT_SUFFIX; oci = schema().findObjectClassInfo(ObjectClass.GROUP_NAME);
-			metaMap = KOHA_CATEGORY_ATTRIBUTE_METADATA; managedNames = MANAGED_KOHA_CATEGORY_CONNID_NAMES;
+			ObjectClassInfo oci = schema().findObjectClassInfo(ObjectClass.GROUP_NAME);
+			JSONObject payload = buildJsonForKoha(attrs, oci, KOHA_CATEGORY_ATTRIBUTE_METADATA, MANAGED_KOHA_CATEGORY_CONNID_NAMES, false);
+			LOG.info("UPDATE: Payload for Koha Group: {0}", payload.toString());
+
+			String endpoint = getConfiguration().getServiceAddress() + API_BASE_PATH + CATEGORIES_ENDPOINT_SUFFIX + "/" + uid.getUidValue();
+			HttpPut request = new HttpPut(endpoint);
+
+			// --- INICIO DE LA CORRECCIÓN ---
+			// Se elimina el bloque try-catch innecesario.
+			callRequest(request, payload);
+			LOG.ok("UPDATE: Koha group object updated. UID={0}", uid.getUidValue());
+			// --- FIN DE LA CORRECCIÓN ---
+
+			return uid;
+
 		} else {
 			throw new UnsupportedOperationException("Update unsupported for: " + oClass.getObjectClassValue());
 		}
-		if (attrs == null || attrs.isEmpty()) {
-			LOG.info("UPDATE: No attributes for UID={0}. Returning UID.", uid.getUidValue());
-			return uid;
-		}
-		JSONObject payload = buildJsonForKoha(attrs, oci, metaMap, managedNames, false);
-		LOG.info("UPDATE: Payload for Koha ({0}): {1}", oci.getType(), payload.toString());
-		String endpoint = getConfiguration().getServiceAddress() + API_BASE_PATH + endpointSuffix + "/" + uid.getUidValue();
-		HttpPut request = new HttpPut(endpoint);
-		callRequest(request, payload);
-		LOG.ok("UPDATE: Koha object ({0}) updated. UID={1}", oci.getType(), uid.getUidValue());
-		return uid;
 	}
 
 	private JSONObject buildJsonForKoha(Set<Attribute> attributes, ObjectClassInfo oci,
