@@ -86,6 +86,7 @@ public class RestUsersConnector
 		}
 	}
 
+	// --- Definiciones para CUENTAS (Patrons) ---
 	private static final Map<String, AttributeMetadata> KOHA_PATRON_ATTRIBUTE_METADATA = new HashMap<>();
 	private static final Set<String> MANAGED_KOHA_PATRON_CONNID_NAMES;
 
@@ -164,6 +165,7 @@ public class RestUsersConnector
 		)));
 	}
 
+	// --- Definiciones para GRUPOS (Categories) ---
 	private static final Map<String, AttributeMetadata> KOHA_CATEGORY_ATTRIBUTE_METADATA = new HashMap<>();
 	private static final Set<String> MANAGED_KOHA_CATEGORY_CONNID_NAMES;
 
@@ -399,11 +401,8 @@ public class RestUsersConnector
 		}
 		if (ObjectClass.ACCOUNT.is(oClass.getObjectClassValue())) {
 			try {
-				// 1. LEER: Obtener el objeto completo del patron desde Koha.
 				JSONObject patronJson = getPatron(uid.getUidValue());
 				LOG.ok("UPDATE: Fetched existing patron with UID={0}", uid.getUidValue());
-
-				// 2. MODIFICAR: Construir un JSON solo con los cambios y fusionarlo.
 				ObjectClassInfo oci = schema().findObjectClassInfo(ObjectClass.ACCOUNT_NAME);
 				JSONObject changesJson = buildJsonForKoha(attrs, oci, KOHA_PATRON_ATTRIBUTE_METADATA, MANAGED_KOHA_PATRON_CONNID_NAMES, false);
 				LOG.info("UPDATE: Applying changes to patron UID={0}: {1}", uid.getUidValue(), changesJson.toString());
@@ -411,11 +410,8 @@ public class RestUsersConnector
 					patronJson.put(key, changesJson.get(key));
 				}
 
-				// 3. LIMPIAR: Eliminar todos los atributos de solo lectura del objeto JSON antes de enviarlo.
-				// Esto previene errores "400 Bad Request" causados por enviar campos no modificables.
 				LOG.ok("Cleaning payload before PUT. Original keys: {0}", patronJson.keySet());
 				for (AttributeMetadata meta : KOHA_PATRON_ATTRIBUTE_METADATA.values()) {
-					// Si un atributo está marcado como NO_UPDATEABLE o NO_CREATABLE, se elimina del payload.
 					if (meta.flags.contains(AttributeMetadata.Flags.NOT_UPDATEABLE) || meta.flags.contains(AttributeMetadata.Flags.NOT_CREATABLE)) {
 						if (patronJson.has(meta.kohaNativeName)) {
 							patronJson.remove(meta.kohaNativeName);
@@ -424,13 +420,11 @@ public class RestUsersConnector
 				}
 				LOG.ok("Cleaned payload for PUT. Final keys: {0}", patronJson.keySet());
 
-				// 4. ESCRIBIR: Enviar el objeto limpio y actualizado de vuelta a Koha.
 				String endpoint = getConfiguration().getServiceAddress() + API_BASE_PATH + PATRONS_ENDPOINT_SUFFIX + "/" + uid.getUidValue();
 				HttpPut request = new HttpPut(endpoint);
-				callRequest(request, patronJson); // Se envía el objeto JSON ya limpio.
+				callRequest(request, patronJson);
 				LOG.ok("UPDATE: Koha patron object updated successfully. UID={0}", uid.getUidValue());
 				return uid;
-
 			} catch (IOException e) {
 				throw new ConnectorIOException("Failed to update patron in Koha for UID " + uid.getUidValue() + ": " + e.getMessage(), e);
 			}
@@ -470,7 +464,8 @@ public class RestUsersConnector
 					metadataMap.get(nameAttribute) : metadataMap.get(connIdAttrName);
 
 			if (meta == null) {
-				LOG.warn("BUILD_JSON: No metadata for ConnId Attr '{0}'. Skipping.", connIdAttrName); continue;
+				LOG.warn("BUILD_JSON: No metadata for ConnId Attr '{0}'. Skipping.", connIdAttrName);
+				continue;
 			}
 			String kohaAttrName = meta.kohaNativeName;
 			if (!Name.NAME.equals(connIdAttrName) && !managedConnIdNames.contains(meta.connIdName)) continue;
@@ -772,6 +767,7 @@ public class RestUsersConnector
 	public void processResponseErrors(CloseableHttpResponse response) throws ConnectorIOException {
 		super.processResponseErrors(response);
 	}
+
 
 	@Override
 	public void test() {
