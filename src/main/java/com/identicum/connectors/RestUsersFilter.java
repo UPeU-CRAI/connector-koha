@@ -4,58 +4,34 @@ import java.util.StringJoiner;
 
 public class RestUsersFilter {
 
-    private String byUid;   // Para búsquedas por Uid.NAME (__UID__)
-    private String byName;  // Para búsquedas por Name.NAME (__NAME__)
-    private String byEmail; // Para búsquedas por el atributo de email (si se implementa)
+    private String byUid;
+    private String byName;
+    private String byEmail;
+    private String byCardNumber; // <-- AÑADIR ESTA LÍNEA
 
     // --- Getters ---
-    public String getByUid() {
-        return byUid;
-    }
+    public String getByUid() { return byUid; }
+    public String getByName() { return byName; }
+    public String getByEmail() { return byEmail; }
+    public String getByCardNumber() { return byCardNumber; } // <-- AÑADIR ESTE MÉTODO
 
-    public String getByName() {
-        return byName;
-    }
+    // --- Setters ---
+    void setByUid(String byUid) { this.byUid = byUid; }
+    void setByName(String byName) { this.byName = byName; }
+    void setByEmail(String byEmail) { this.byEmail = byEmail; }
+    void setByCardNumber(String byCardNumber) { this.byCardNumber = byCardNumber; } // <-- AÑADIR ESTE MÉTODO
 
-    public String getByEmail() {
-        return byEmail;
-    }
-
-    // --- Setters (o package-private para ser usado solo por el Translator) ---
-    // Usaremos package-private para que solo RestUsersFilterTranslator los modifique.
-    void setByUid(String byUid) {
-        this.byUid = byUid;
-    }
-
-    void setByName(String byName) {
-        this.byName = byName;
-    }
-
-    void setByEmail(String byEmail) {
-        this.byEmail = byEmail;
-    }
-
-    /**
-     * Verifica si algún criterio de filtro ha sido establecido.
-     * @return true si al menos un criterio de filtro está presente, false de lo contrario.
-     */
     public boolean hasCriteria() {
-        return byUid != null || byName != null || byEmail != null;
+        return byUid != null || byName != null || byEmail != null || byCardNumber != null; // <-- ACTUALIZAR ESTA LÍNEA
     }
 
     @Override
     public String toString() {
-        // Usar StringJoiner para una mejor construcción del string
         StringJoiner joiner = new StringJoiner(", ", RestUsersFilter.class.getSimpleName() + "[", "]");
-        if (byUid != null) {
-            joiner.add("byUid='" + byUid + "'");
-        }
-        if (byName != null) {
-            joiner.add("byName='" + byName + "'");
-        }
-        if (byEmail != null) {
-            joiner.add("byEmail='" + byEmail + "'");
-        }
+        if (byUid != null) joiner.add("byUid='" + byUid + "'");
+        if (byName != null) joiner.add("byName='" + byName + "'");
+        if (byEmail != null) joiner.add("byEmail='" + byEmail + "'");
+        if (byCardNumber != null) joiner.add("byCardNumber='" + byCardNumber + "'"); // <-- AÑADIR ESTA LÍNEA
         return joiner.toString();
     }
 }
