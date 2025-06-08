@@ -1,35 +1,68 @@
-# rest-users-connectors
+# Conector de Koha para Midpoint
 
-A sample Rest Connector for midPoint implementing the Rest Connector Superclass model
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Midpoint Version](https://img.shields.io/badge/Midpoint-4.4%2B-orange.svg)](https://evolveum.com/midpoint/)
+[![ConnId Version](https://img.shields.io/badge/ConnId-1.5-brightgreen.svg)](https://connid.tirasa.net/)
 
-# Installation
+Conector de identidades para **Evolveum Midpoint** que permite la gestión del ciclo de vida de usuarios (Patrones) en el **Sistema Integrado de Gestión de Bibliotecas (ILS) Koha**.
 
-1. Clone this repository
+Este conector utiliza la API REST de Koha y ha sido desarrollado siguiendo las mejores prácticas del Identity Connector Framework (ConnId).
 
+## ✨ Características Principales
+
+-   **Gestión Completa de Patrones:** Soporte para operaciones de Creación (`Create`), Lectura/Búsqueda (`Search`), Actualización (`Update`) y Eliminación (`Delete`).
+-   **Autenticación Flexible:** Compatibilidad con autenticación **Básica** (usuario/contraseña) y **OAuth2** (Client Credentials) para una integración segura.
+-   **Arquitectura Robusta:** El código está refactorizado con un diseño modular que separa responsabilidades (autenticación, servicios, mapeo de datos), garantizando la estabilidad y facilitando el mantenimiento futuro.
+-   **Búsqueda por Atributos:** Permite buscar usuarios en Koha por UID, `userid`, `email` y `cardnumber` directamente desde Midpoint.
+
+## 🚀 Instalación
+
+1.  **Descargar el Conector:** Ve a la sección de **[Releases](https://github.com/UPeU-CRAI/connector-koha/releases)** de este repositorio y descarga el archivo `.jar` de la última versión (ej. `connector-koha-1.0.0.jar`).
+2.  **Desplegar en Midpoint:** Copia el archivo `.jar` descargado en el directorio de conectores de tu instancia de Midpoint:
+    ```bash
+    cp connector-koha-1.0.0.jar $MIDPOINT_HOME/var/icf-connectors/
+    ```
+3.  **Reiniciar Midpoint:** Reinicia el servicio de Midpoint para que detecte el nuevo conector.
+
+## ⚙️ Configuración del Recurso en Midpoint
+
+Una vez instalado, puedes crear un nuevo recurso en Midpoint. Aquí tienes un ejemplo de la sección `<connectorConfiguration>` que debes usar.
+
+```xml
+<connectorConfiguration>
+    <icfc:configurationProperties xmlns:icfc="[http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/connector-schema-3](http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/connector-schema-3)"
+                                  xmlns:cfg="[http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/connector-koha/com.identicum.connectors.KohaConnector](http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/connector-koha/com.identicum.connectors.KohaConnector)">
+        
+        <cfg:serviceAddress>http://TU_URL_DE_KOHA</cfg:serviceAddress>
+
+        <cfg:authMethod>OAUTH2</cfg:authMethod>
+        
+        <cfg:clientId>TU_CLIENT_ID</cfg:clientId>
+        <cfg:clientSecret>
+            <t:clearValue>TU_CLIENT_SECRET</t:clearValue>
+        </cfg:clientSecret>
+
+        <cfg:trustAllCertificates>false</cfg:trustAllCertificates>
+        
+    </icfc:configurationProperties>
+</connectorConfiguration>
 ```
-git clone git@github.com:Identicum/rest-users-connector.git
-```
 
-2. Compile the sources and run the application
+Para una guía completa sobre cómo mapear los atributos del **Esquema de Extensión UPeU** a los atributos de este conector, consulta la documentación del esquema.
 
-```
-cd rest-users-connector
-mvn clean package
-```
+## 🏛️ Arquitectura del Conector
 
-3. Copy the connector jar to the midpoint folder
+El código fuente del conector sigue una arquitectura modular para separar responsabilidades:
+-   **`KohaConnector.java`**: Actúa como el orquestador principal que implementa las interfaces de ConnId.
+-   **`KohaAuthenticator.java`**: Centraliza la lógica de autenticación.
+-   **Paquete `services`**: Gestiona la comunicación con los endpoints específicos de la API de Koha.
+-   **Paquete `mappers`**: Se encarga de la transformación de datos entre Midpoint y el formato JSON de Koha.
 
-```
-cp target/rest-users-connector-0.0.X-SNAPSHOT.jar $MIDPOINT_HOME/var/icf-connectors/
-```
+## 📜 Licencia
 
-4. Restart midPoint
+Este proyecto está bajo la Licencia Apache 2.0. Consulta el archivo `LICENSE` para más detalles.
 
-5. Create the resource using the connector
+## 🤝 Contribuciones
 
+Las contribuciones son bienvenidas. Para cambios mayores, por favor, abre un "issue" primero para discutir lo que te gustaría cambiar.
 
-# References
-
-* Rest Users Api: https://github.com/Identicum/rest-users-api
-* Rest Connector Superclass: https://wiki.evolveum.com/display/midPoint/REST+Connector+Superclass 
-* Rest Resource Example: https://github.com/Evolveum/midpoint/tree/master/samples/resources/rest
