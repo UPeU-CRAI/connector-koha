@@ -22,7 +22,7 @@ import java.util.Set;
 @ConnectorClass(displayNameKey = "connector.identicum.rest.display", configurationClass = KohaConfiguration.class)
 public class KohaConnector
 		extends AbstractRestConnector<KohaConfiguration>
-		implements CreateOp, UpdateOp, SchemaOp, SearchOp<RestUsersFilter>, DeleteOp, TestOp {
+		implements CreateOp, UpdateOp, SchemaOp, SearchOp<KohaFilter>, DeleteOp, TestOp {
 
 	private static final Log LOG = Log.getLog(KohaConnector.class);
 
@@ -163,7 +163,7 @@ public class KohaConnector
 	}
 
 	@Override
-	public void executeQuery(ObjectClass oClass, RestUsersFilter filter, ResultsHandler handler, OperationOptions options) {
+	public void executeQuery(ObjectClass oClass, KohaFilter filter, ResultsHandler handler, OperationOptions options) {
 		try {
 			if (ObjectClass.ACCOUNT.is(oClass.getObjectClassValue())) {
 				if (filter != null && filter.getByUid() != null) {
@@ -205,8 +205,8 @@ public class KohaConnector
 	}
 
 	@Override
-	public FilterTranslator<RestUsersFilter> createFilterTranslator(ObjectClass oClass, OperationOptions options) {
-		return new RestUsersFilterTranslator();
+	public FilterTranslator<KohaFilter> createFilterTranslator(ObjectClass oClass, OperationOptions options) {
+		return new KohaFilterTranslator();
 	}
 
 	@Override

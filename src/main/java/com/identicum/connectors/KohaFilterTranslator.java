@@ -8,12 +8,12 @@ import org.identityconnectors.framework.common.objects.Uid;
 import org.identityconnectors.framework.common.objects.filter.AbstractFilterTranslator;
 import org.identityconnectors.framework.common.objects.filter.EqualsFilter;
 
-public class RestUsersFilterTranslator extends AbstractFilterTranslator<RestUsersFilter> {
+public class KohaFilterTranslator extends AbstractFilterTranslator<KohaFilter> {
 
-    private static final Log LOG = Log.getLog(RestUsersFilterTranslator.class);
+    private static final Log LOG = Log.getLog(KohaFilterTranslator.class);
 
     @Override
-    protected RestUsersFilter createEqualsExpression(EqualsFilter filter, boolean not) {
+    protected KohaFilter createEqualsExpression(EqualsFilter filter, boolean not) {
         LOG.ok("createEqualsExpression, filter: {0}, not: {1}", filter, not);
 
         if (not) {
@@ -30,31 +30,31 @@ public class RestUsersFilterTranslator extends AbstractFilterTranslator<RestUser
             return null;
         }
 
-        RestUsersFilter translatedFilter = new RestUsersFilter();
+        KohaFilter translatedFilter = new KohaFilter();
         boolean handled = false;
 
         if (Uid.NAME.equals(attrName)) { // Filtro por __UID__
             translatedFilter.setByUid(singleValue);
-            LOG.ok("Translated EqualsFilter on Uid.NAME to RestUsersFilter.byUid: {0}", singleValue);
+            LOG.ok("Translated EqualsFilter on Uid.NAME to KohaFilter.byUid: {0}", singleValue);
             handled = true;
 
         } else if (Name.NAME.equals(attrName)) { // Filtro por __NAME__ (que en nuestro caso es 'userid')
             translatedFilter.setByName(singleValue);
-            LOG.ok("Translated EqualsFilter on Name.NAME to RestUsersFilter.byName: {0}", singleValue);
+            LOG.ok("Translated EqualsFilter on Name.NAME to KohaFilter.byName: {0}", singleValue);
             handled = true;
 
             // --- INICIO DE LA CORRECCIÓN ---
             // Se reemplaza la referencia a la constante por el nombre del atributo en texto plano.
         } else if ("email".equals(attrName)) { // Filtro por email
             translatedFilter.setByEmail(singleValue);
-            LOG.ok("Translated EqualsFilter on 'email' to RestUsersFilter.byEmail: {0}", singleValue);
+            LOG.ok("Translated EqualsFilter on 'email' to KohaFilter.byEmail: {0}", singleValue);
             handled = true;
 
         } else if ("cardnumber".equals(attrName)) { // Filtro por cardnumber
             // Nota: Para que este filtro funcione, necesitas añadir el campo y sus getters/setters
-            // en RestUsersFilter.java y usarlo en executeQuery en KohaConnector.java
+            // en KohaFilter.java y usarlo en executeQuery en KohaConnector.java
             translatedFilter.setByCardNumber(singleValue); // Asumiendo que añades este método
-            LOG.ok("Translated EqualsFilter on 'cardnumber' to RestUsersFilter.byCardNumber: {0}", singleValue);
+            LOG.ok("Translated EqualsFilter on 'cardnumber' to KohaFilter.byCardNumber: {0}", singleValue);
             handled = true;
         }
         // --- FIN DE LA CORRECCIÓN ---

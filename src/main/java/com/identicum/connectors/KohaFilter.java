@@ -2,7 +2,7 @@ package com.identicum.connectors;
 
 import java.util.StringJoiner;
 
-public class RestUsersFilter {
+public class KohaFilter {
 
     private String byUid;
     private String byName;
@@ -27,7 +27,7 @@ public class RestUsersFilter {
 
     @Override
     public String toString() {
-        StringJoiner joiner = new StringJoiner(", ", RestUsersFilter.class.getSimpleName() + "[", "]");
+        StringJoiner joiner = new StringJoiner(", ", KohaFilter.class.getSimpleName() + "[", "]");
         if (byUid != null) joiner.add("byUid='" + byUid + "'");
         if (byName != null) joiner.add("byName='" + byName + "'");
         if (byEmail != null) joiner.add("byEmail='" + byEmail + "'");

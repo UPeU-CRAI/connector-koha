@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resource oid="_TODO_GENERAR_NUEVO_OID_"
+          xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+          xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+          xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3"
+          xmlns:ri="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3"
+          xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3"
+          xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3"
+          xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3"
+          xmlns:cfg="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/connector-koha/com.identicum.connectors.KohaConnector">
+
+    <name>Koha (UPeU)</name>
+
+    <connectorRef type="ConnectorType">
+        <filter>
+            <q:equal>
+                <q:path>c:connectorType</q:path>
+                <q:value>com.identicum.connectors.KohaConnector</q:value>
+            </q:equal>
+            <q:equal>
+                <q:path>c:connectorVersion</q:path>
+                <q:value>1.0.0</q:value>
+            </q:equal>
+        </filter>
+    </connectorRef>
+
+    <connectorConfiguration>
+        <icfc:configurationProperties>
+            <cfg:serviceAddress>http://koha.upeu.edu.pe</cfg:serviceAddress>
+            <cfg:authMethod>OAUTH2</cfg:authMethod>
+            <cfg:clientId>TU_CLIENT_ID</cfg:clientId>
+            <cfg:clientSecret>
+                <t:clearValue>TU_CLIENT_SECRET</t:clearValue>
+            </cfg:clientSecret>
+            <cfg:trustAllCertificates>false</cfg:trustAllCertificates>
+        </icfc:configurationProperties>
+    </connectorConfiguration>
+
+    <schemaHandling>
+        <objectType>
+            <kind>account</kind>
+            <intent>default</intent>
+            <displayName>Patrón de Koha</displayName>
+            <objectClass>icfs:account</objectClass>
+            <default>true</default>
+
+            <attribute>
+                <ref>icfs:name</ref> <displayName>User ID (Login)</displayName>
+                <outbound>
+                    <source><path>$user/name</path></source>
+                </outbound>
+                <inbound>
+                    <target><path>$user/name</path></target>
+                </inbound>
+            </attribute>
+            <attribute>
+                <ref>ri:surname</ref>
+                <outbound><source><path>$user/familyName</path></source></outbound>
+                <inbound><target><path>$user/familyName</path></target></inbound>
+            </attribute>
+        </objectType>
+    </schemaHandling>
+
+    <capabilities>
+        <configured>
+            <cap:schema/>
+            <cap:testConnection/>
+            <cap:create/>
+            <cap:read/>
+            <cap:update/>
+            <cap:delete/>
+            <cap:activation/>
+        </configured>
+    </capabilities>
+
+</resource>

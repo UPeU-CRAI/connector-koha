@@ -1,6 +1,6 @@
 package com.identicum.connectors.services;
 
-import com.identicum.connectors.RestUsersFilter;
+import com.identicum.connectors.KohaFilter;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.*;
@@ -68,7 +68,7 @@ public class CategoryService {
         callRequest(request);
     }
 
-    public JSONArray searchCategories(RestUsersFilter filter, OperationOptions opts) throws IOException {
+    public JSONArray searchCategories(KohaFilter filter, OperationOptions opts) throws IOException {
         JSONArray allResults = new JSONArray();
         int pageSize = (opts != null && opts.getPageSize() != null) ? opts.getPageSize() : 100;
         int currentPage = 1;
