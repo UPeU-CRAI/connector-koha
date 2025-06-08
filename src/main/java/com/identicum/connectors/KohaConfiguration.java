@@ -9,9 +9,9 @@ import org.identityconnectors.framework.spi.ConfigurationProperty;
  * Configuración del conector REST para Koha.
  * Soporta autenticación BASIC y OAuth2 con credenciales de cliente.
  */
-public class RestUsersConfiguration extends AbstractRestConfiguration {
+public class KohaConfiguration extends AbstractRestConfiguration {
 
-    private static final Log LOG = Log.getLog(RestUsersConfiguration.class);
+    private static final Log LOG = Log.getLog(KohaConfiguration.class);
 
     // === API Base ===
 
@@ -108,7 +108,7 @@ public class RestUsersConfiguration extends AbstractRestConfiguration {
             helpMessageKey = "tokenValue.help",
             order = Integer.MAX_VALUE
     )
-    public String getTokenValue() {
+    public GuardedString getTokenValue() {
         return null;
     }
 

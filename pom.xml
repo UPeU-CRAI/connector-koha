@@ -4,30 +4,32 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<groupId>com.identicum.midpoint</groupId>
-	<artifactId>rest-users-connector</artifactId>
-	<version>0.0.2-SNAPSHOT</version>
+	<artifactId>koha-connector</artifactId>
+	<version>1.0.0</version>
 	<packaging>jar</packaging>
+
+	<name>Midpoint Koha Connector</name>
+	<description>Identity Connector Framework (ConnId) connector for managing users and groups in Koha ILS.</description>
 
 	<parent>
 		<groupId>com.evolveum.polygon</groupId>
 		<artifactId>connector-parent</artifactId>
 		<version>1.4.2.14</version>
-		<relativePath></relativePath>
 	</parent>
 
 	<properties>
-		<connectorPackage>com.identicum.connectors</connectorPackage>
-		<connectorClass>RestUsersConnector</connectorClass>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<maven.compiler.source>1.8</maven.compiler.source>
 		<maven.compiler.target>1.8</maven.compiler.target>
-		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<connectorPackage>com.identicum.connectors</connectorPackage>
+		<connectorClass>KohaConnector</connectorClass>
 	</properties>
 
 	<dependencies>
 		<dependency>
 			<groupId>com.evolveum.polygon</groupId>
 			<artifactId>connector-rest</artifactId>
-			<version>1.4.2.14-SNAPSHOT</version>
+			<version>1.4.2.35</version>
 		</dependency>
 		<dependency>
 			<groupId>org.json</groupId>

@@ -17,7 +17,7 @@
 			<q:and>
 				<q:equal>
 					<q:path>c:connectorType</q:path>
-					<q:value>com.identicum.connectors.RestUsersConnector</q:value>
+					<q:value>com.identicum.connectors.KohaConnector</q:value>
 				</q:equal>
 				<q:equal>
 					<q:path>c:connectorVersion</q:path>
@@ -54,7 +54,7 @@
             <cfg:clientSecret>
                 <t:clearValue>TU_CLIENT_SECRET_DE_KOHA</t:clearValue>
             </cfg:clientSecret>
-            <cfg:tokenUrlSuffix>/api/v1/oauth/token</cfg:tokenUrlSuffix> <!- Este es el valor por defecto en RestUsersConfiguration.java ->
+            <cfg:tokenUrlSuffix>/api/v1/oauth/token</cfg:tokenUrlSuffix> <!- Este es el valor por defecto en KohaConfiguration.java ->
             -->
 
 			<cfg:trustAllCertificates>true</cfg:trustAllCertificates> </icfc:configurationProperties>

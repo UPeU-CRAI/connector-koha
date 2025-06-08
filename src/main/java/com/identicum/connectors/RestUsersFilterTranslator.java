@@ -52,7 +52,7 @@ public class RestUsersFilterTranslator extends AbstractFilterTranslator<RestUser
 
         } else if ("cardnumber".equals(attrName)) { // Filtro por cardnumber
             // Nota: Para que este filtro funcione, necesitas añadir el campo y sus getters/setters
-            // en RestUsersFilter.java y usarlo en executeQuery en RestUsersConnector.java
+            // en RestUsersFilter.java y usarlo en executeQuery en KohaConnector.java
             translatedFilter.setByCardNumber(singleValue); // Asumiendo que añades este método
             LOG.ok("Translated EqualsFilter on 'cardnumber' to RestUsersFilter.byCardNumber: {0}", singleValue);
             handled = true;
