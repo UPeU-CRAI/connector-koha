@@ -29,8 +29,13 @@ public abstract class BaseMapper {
      * @return El valor en un formato compatible con JSON (String, Integer, Boolean, etc.).
      */
     protected Object convertConnIdValueToKohaJsonValue(Object connIdValue, AttributeMetadata meta) {
+        // Para logs detallados, usar LOG.ok o LOG.info. El nivel se controla en Midpoint.
+        LOG.ok("Trace Mapper: Convertir valor ConnId a Koha JSON. Atributo: {0}, Valor ConnId: {1}, Tipo Esperado ConnId: {2}", meta.getConnIdName(), connIdValue, meta.getType().getSimpleName());
+        Object kohaJsonValue;
         if (connIdValue == null) {
-            return JSONObject.NULL;
+            kohaJsonValue = JSONObject.NULL;
+            LOG.ok("Trace Mapper: Valor convertido para Koha JSON ({0}): {1}", meta.getConnIdName(), kohaJsonValue);
+            return kohaJsonValue;
         }
         Class<?> connIdType = meta.getType();
         String connIdAttrName = meta.getConnIdName();
@@ -40,16 +45,21 @@ public abstract class BaseMapper {
             if (connIdAttrName.equals("date_of_birth") || connIdAttrName.equals("expiry_date")) {
                 try {
                     // Validamos el formato pero lo devolvemos como string
-                    return LocalDate.parse(connIdValue.toString(), KOHA_DATE_FORMATTER).toString();
+                    kohaJsonValue = LocalDate.parse(connIdValue.toString(), KOHA_DATE_FORMATTER).toString();
                 } catch (DateTimeParseException e) {
-                    throw new InvalidAttributeValueException("Fecha inválida " + connIdValue + " para " + connIdAttrName, e);
+                    LOG.warn(e, "Error de parseo de fecha para ConnId->Koha: Atributo ''{0}'', Valor ''{1}''.", connIdAttrName, connIdValue);
+                    throw new InvalidAttributeValueException("Formato de fecha inválido '" + connIdValue + "' para el atributo '" + connIdAttrName + "'. Se esperaba yyyy-MM-dd.", e);
                 }
+            } else {
+                kohaJsonValue = connIdValue.toString();
             }
-            return connIdValue.toString();
         } else if (connIdType.equals(Boolean.class) || connIdType.equals(Integer.class) || connIdType.equals(Long.class)) {
-            return connIdValue;
+            kohaJsonValue = connIdValue;
+        } else {
+            kohaJsonValue = connIdValue.toString();
         }
-        return connIdValue.toString();
+        LOG.ok("Trace Mapper: Valor convertido para Koha JSON ({0}): {1}", meta.getConnIdName(), kohaJsonValue);
+        return kohaJsonValue;
     }
 
     /**
@@ -59,7 +69,10 @@ public abstract class BaseMapper {
      * @return El valor en el tipo de dato correcto para ConnId.
      */
     protected Object convertKohaValueToConnIdValue(Object kohaValue, AttributeMetadata meta) {
+        LOG.ok("Trace Mapper: Convertir valor Koha a ConnId. Atributo: {0}, Valor Koha: {1}, Tipo Esperado ConnId: {2}", meta.getConnIdName(), kohaValue, meta.getType().getSimpleName());
+        Object connIdValue;
         if (kohaValue == null || JSONObject.NULL.equals(kohaValue)) {
+            LOG.ok("Trace Mapper: Valor Koha es nulo o JSONObject.NULL para {0}. Retornando null.", meta.getConnIdName());
             return null;
         }
         Class<?> connIdType = meta.getType();
@@ -71,27 +84,41 @@ public abstract class BaseMapper {
                 // Manejo especial para fechas/horas que se reciben como String
                 if (connIdAttrName.equals("date_of_birth") || connIdAttrName.equals("expiry_date") ||
                         connIdAttrName.equals("date_enrolled") || connIdAttrName.equals("date_renewed")) {
-                    return LocalDate.parse(kohaString, KOHA_DATE_FORMATTER).toString();
+                    connIdValue = LocalDate.parse(kohaString, KOHA_DATE_FORMATTER).toString();
                 } else if (connIdAttrName.equals("updated_on") || connIdAttrName.equals("last_seen")) {
-                    return ZonedDateTime.parse(kohaString, KOHA_DATETIME_FORMATTER).toString();
+                    // Asegurar que el formato de salida incluya los segundos
+                    connIdValue = ZonedDateTime.parse(kohaString, KOHA_DATETIME_FORMATTER).format(KOHA_DATETIME_FORMATTER);
+                } else {
+                    connIdValue = kohaString;
                 }
-                return kohaString;
             } else if (connIdType.equals(Boolean.class)) {
-                if (kohaValue instanceof Boolean) return kohaValue;
-                // Koha a menudo devuelve '0' o '1' para los booleanos
-                return "true".equalsIgnoreCase(kohaValue.toString()) || "1".equals(kohaValue.toString());
+                if (kohaValue instanceof Boolean) {
+                    connIdValue = kohaValue;
+                } else {
+                    // Koha a menudo devuelve '0' o '1' para los booleanos
+                    connIdValue = "true".equalsIgnoreCase(kohaValue.toString()) || "1".equals(kohaValue.toString());
+                }
             } else if (connIdType.equals(Integer.class)) {
-                if (kohaValue instanceof Integer) return kohaValue;
-                return Integer.parseInt(kohaValue.toString());
+                if (kohaValue instanceof Integer) {
+                    connIdValue = kohaValue;
+                } else {
+                    connIdValue = Integer.parseInt(kohaValue.toString());
+                }
             } else if (connIdType.equals(Long.class)) {
-                if (kohaValue instanceof Long) return kohaValue;
-                return Long.parseLong(kohaValue.toString());
+                if (kohaValue instanceof Long) {
+                    connIdValue = kohaValue;
+                } else {
+                    connIdValue = Long.parseLong(kohaValue.toString());
+                }
+            } else {
+                connIdValue = kohaValue.toString(); // Fallback para otros tipos no explícitamente manejados
             }
         } catch (NumberFormatException | DateTimeParseException e) {
             LOG.warn("CONVERT_KOHA_VALUE: Error de parseo para ''{0}'' (attr: {1}) a ''{2}''. Error: {3}",
                     kohaValue, connIdAttrName, connIdType.getSimpleName(), e.getMessage());
             return null; // Omitir atributo si no se puede parsear
         }
-        return kohaValue.toString();
+        LOG.ok("Trace Mapper: Valor convertido para ConnId ({0}): {1}", meta.getConnIdName(), connIdValue);
+        return connIdValue;
     }
 }
