@@ -47,13 +47,13 @@ public class KohaConnector
 			throw new ConfigurationException("Service address (serviceAddress) must be provided.");
 		}
 
-		String authMethod = getConfiguration().getAuthMethod();
+		String authenticationMethodStrategy = getConfiguration().getAuthenticationMethodStrategy();
 
-		if (StringUtil.isBlank(authMethod)) {
-			throw new ConfigurationException("Authentication method (authMethod) must be provided.");
+		if (StringUtil.isBlank(authenticationMethodStrategy)) {
+			throw new ConfigurationException("Authentication method (authenticationMethodStrategy) must be provided.");
 		}
 
-		if ("BASIC".equalsIgnoreCase(authMethod)) {
+		if ("BASIC".equalsIgnoreCase(authenticationMethodStrategy)) {
 			if (StringUtil.isBlank(getConfiguration().getUsername())) {
 				throw new ConfigurationException("Username must be provided for BASIC authentication.");
 			}
@@ -61,7 +61,7 @@ public class KohaConnector
 			// if (getConfiguration().getPassword() == null) { // Or a more specific check
 			//    throw new ConfigurationException("Password must be provided for BASIC authentication.");
 			// }
-		} else if ("OAUTH2".equalsIgnoreCase(authMethod)) {
+		} else if ("OAUTH2".equalsIgnoreCase(authenticationMethodStrategy)) {
 			if (StringUtil.isBlank(getConfiguration().getClientId())) {
 				throw new ConfigurationException("Client ID must be provided for OAUTH2 authentication.");
 			}
@@ -69,7 +69,7 @@ public class KohaConnector
 				throw new ConfigurationException("Client Secret must be provided for OAUTH2 authentication.");
 			}
 		} else {
-			throw new ConfigurationException("Invalid authentication method (authMethod) specified. Must be 'BASIC' or 'OAUTH2'.");
+			throw new ConfigurationException("Invalid authentication method (authenticationMethodStrategy) specified. Must be 'BASIC' or 'OAUTH2'.");
 		}
 
 		LOG.ok("Inicializando componentes del conector...");
