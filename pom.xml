@@ -14,7 +14,7 @@
 	<parent>
 		<groupId>com.evolveum.polygon</groupId>
 		<artifactId>connector-parent</artifactId>
-		<version>1.4.2.14</version>
+		<version>1.5.2.0</version>
 	</parent>
 
 	<properties>
@@ -29,12 +29,31 @@
 		<dependency>
 			<groupId>com.evolveum.polygon</groupId>
 			<artifactId>connector-rest</artifactId>
-			<version>1.4.2.35</version>
+			<version>1.5.2.0</version>
+		</dependency>
+		<!-- Apache HttpClient 4.x -->
+		<dependency>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpclient</artifactId>
+			<version>4.5.14</version>
 		</dependency>
 		<dependency>
 			<groupId>org.json</groupId>
 			<artifactId>json</artifactId>
-			<version>20231013</version>
+			<version>20250517</version>
+		</dependency>
+		<!-- JUnit 5 for testing -->
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-api</artifactId>
+			<version>5.9.3</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
+			<version>5.9.3</version>
+			<scope>test</scope>
 		</dependency>
 	</dependencies>
 

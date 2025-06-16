@@ -8,11 +8,14 @@ import org.json.JSONObject;
 
 import java.util.*;
 
+import org.identityconnectors.common.logging.Log;
+
 /**
  * Mapper especializado para los objetos de tipo Categoría de Patrón (Group).
  * Contiene las definiciones de atributos de categorías y la lógica para su transformación.
  */
 public class CategoryMapper extends BaseMapper {
+    private static final Log LOG = Log.getLog(CategoryMapper.class);
 
     // --- Definiciones de Atributos de CATEGORÍAS ---
     public static final String KOHA_CATEGORY_ID_NATIVE_NAME = "patron_category_id";
@@ -41,39 +44,61 @@ public class CategoryMapper extends BaseMapper {
      * Construye un objeto JSON para una Categoría a partir de atributos de ConnId.
      */
     public JSONObject buildCategoryJson(Set<Attribute> attributes, boolean isCreate) {
+        LOG.ok("Construyendo JSON de Categoría para {0}. Atributos ConnId: {1}", (isCreate ? "CREATE" : "UPDATE"), attributes);
         JSONObject jo = new JSONObject();
         Set<String> processedKohaAttrs = new HashSet<>();
-        final String nameAttribute = "name";
+        final String nameAttribute = "name"; // ConnId Name attribute for Categories
 
         for (Attribute attr : attributes) {
             String connIdAttrName = attr.getName();
-            if (Uid.NAME.equals(connIdAttrName)) continue;
+            if (Uid.NAME.equals(connIdAttrName)) {
+                LOG.ok("Trace Mapper: Omitiendo atributo Uid.NAME ({0}) directamente, se maneja por separado.", connIdAttrName);
+                continue;
+            }
 
             AttributeMetadata meta = Name.NAME.equals(connIdAttrName) ?
                     ATTRIBUTE_METADATA_MAP.get(nameAttribute) : ATTRIBUTE_METADATA_MAP.get(connIdAttrName);
+            LOG.ok("Trace Mapper: Procesando atributo ConnId: {0}, Meta: {1}", connIdAttrName, meta);
 
             if (meta == null) {
-                LOG.warn("BUILD_JSON: No hay metadatos para el atributo de Categoría '{0}'. Omitiendo.", connIdAttrName);
+                LOG.warn("No hay metadatos para el atributo de Categoría '{0}'. Omitiendo.", connIdAttrName);
                 continue;
             }
 
-            if (isCreate && meta.isNotCreatable()) continue;
-            if (!isCreate && meta.isNotUpdateable()) continue;
+            if (isCreate && meta.isNotCreatable()) {
+                LOG.ok("Trace Mapper: Omitiendo atributo {0} debido a que es no creable", connIdAttrName);
+                continue;
+            }
+            if (!isCreate && meta.isNotUpdateable()) {
+                LOG.ok("Trace Mapper: Omitiendo atributo {0} debido a que es no actualizable", connIdAttrName);
+                continue;
+            }
 
             List<Object> values = attr.getValue();
             if (values == null || values.isEmpty() || values.get(0) == null) {
-                if (!isCreate) jo.put(meta.getKohaNativeName(), JSONObject.NULL);
+                if (!isCreate) { // Only set to NULL for updates
+                    LOG.ok("Trace Mapper: Estableciendo {0} a NULL en JSON para UPDATE", meta.getKohaNativeName());
+                    jo.put(meta.getKohaNativeName(), JSONObject.NULL);
+                } else {
+                    LOG.ok("Trace Mapper: Omitiendo atributo {0} con valor nulo/vacío para CREATE.", connIdAttrName);
+                }
                 continue;
             }
-            if (processedKohaAttrs.contains(meta.getKohaNativeName())) continue;
+
+            if (processedKohaAttrs.contains(meta.getKohaNativeName())) {
+                LOG.ok("Trace Mapper: Atributo Koha nativo '{0}' ya procesado (posiblemente por Name y '{1}' mapeando al mismo). Omitiendo para ConnId '{1}'.", meta.getKohaNativeName(), connIdAttrName);
+                continue;
+            }
 
             Object kohaValue = meta.isMultivalued() ?
                     new JSONArray(values.stream().map(v -> convertConnIdValueToKohaJsonValue(v, meta)).filter(Objects::nonNull).toArray())
                     : convertConnIdValueToKohaJsonValue(values.get(0), meta);
 
+            LOG.ok("Trace Mapper: Mapeando ConnId '{0}' a Koha '{1}' con valor: {2}", connIdAttrName, meta.getKohaNativeName(), kohaValue);
             jo.put(meta.getKohaNativeName(), kohaValue);
             processedKohaAttrs.add(meta.getKohaNativeName());
         }
+        LOG.ok("JSON de Categoría construido: {0}", jo.toString(2));
         return jo;
     }
 
@@ -82,37 +107,61 @@ public class CategoryMapper extends BaseMapper {
      * Convierte un objeto JSON de una Categoría en un ConnectorObject.
      */
     public ConnectorObject convertJsonToCategoryObject(JSONObject kohaJson) {
-        if (kohaJson == null) return null;
-
-        ConnectorObjectBuilder builder = new ConnectorObjectBuilder().setObjectClass(ObjectClass.GROUP);
-
-        // 1. Lectura segura del UID y del NAME.
-        // El UID de la categoría ('patron_category_id') puede ser un número.
-        String uidVal = String.valueOf(kohaJson.get(KOHA_CATEGORY_ID_NATIVE_NAME));
-        String nameVal = kohaJson.optString(ATTRIBUTE_METADATA_MAP.get("name").getKohaNativeName(), null);
-
-        if (StringUtil.isBlank(uidVal)) {
-            LOG.error("CONVERT_JSON: Se encontró una Categoría sin UID. Se omitirá. JSON: {0}", kohaJson.toString());
+        LOG.ok("Convirtiendo JSON de Koha a ConnectorObject (Categoría): {0}", kohaJson.toString(2));
+        if (kohaJson == null) {
+            LOG.warn("El JSON de Koha proporcionado es nulo. Retornando nulo.");
             return null;
         }
 
-        builder.setUid(new Uid(uidVal));
-        builder.setName(new Name(nameVal != null ? nameVal : uidVal));
+        ConnectorObjectBuilder builder = new ConnectorObjectBuilder().setObjectClass(ObjectClass.GROUP);
 
-        // 2. Mapear el resto de los atributos, omitiendo 'name' que ya se usó para __NAME__.
+        // UID es mandatorio. Koha usa 'patron_category_id'.
+        Object rawUid = kohaJson.opt(KOHA_CATEGORY_ID_NATIVE_NAME);
+        String uidVal = (rawUid != null) ? String.valueOf(rawUid) : null;
+
+        if (StringUtil.isBlank(uidVal)) {
+            LOG.error("Categoría JSON no tiene UID ({0}). JSON: {1}", KOHA_CATEGORY_ID_NATIVE_NAME, kohaJson.toString(2));
+            return null; // No se puede construir un ConnectorObject sin UID
+        }
+        builder.setUid(new Uid(uidVal));
+
+        // Name attribute - ConnId 'Name' (que mapea a 'description' de Koha para categorías)
+        AttributeMetadata nameAttributeMeta = ATTRIBUTE_METADATA_MAP.get("name"); // "name" es el ConnId Name para Categorías
+        String nameVal = null;
+        if (nameAttributeMeta != null && kohaJson.has(nameAttributeMeta.getKohaNativeName())) {
+            nameVal = kohaJson.optString(nameAttributeMeta.getKohaNativeName(), null);
+            LOG.ok("Trace Mapper: Mapeando Koha '{0}' (description) a ConnId Name con valor: {1}", nameAttributeMeta.getKohaNativeName(), nameVal);
+        } else {
+            LOG.ok("Trace Mapper: Atributo Koha para Name (mapeado de 'description') no encontrado o nulo en JSON. Usando UID como Name fallback.");
+        }
+        builder.setName(new Name(nameVal != null ? nameVal : uidVal)); // Fallback a UID si 'description' no está o es nulo.
+
+
+        // Resto de los atributos
         for (AttributeMetadata meta : ATTRIBUTE_METADATA_MAP.values()) {
-            if ("name".equals(meta.getConnIdName())) {
-                continue; // Omitir, ya mapeado a __NAME__
-            }
+            LOG.ok("Trace Mapper: Considerando atributo Koha '{0}' (ConnId: '{1}')", meta.getKohaNativeName(), meta.getConnIdName());
+
+            // No omitir el atributo 'name' aquí si queremos que esté disponible tanto en Name.NAME como en el set de atributos.
+            // La lógica de Name.NAME ya lo ha tomado de kohaJson.getString("description").
+            // Si 'meta.getConnIdName()' es "name", se procesará y añadirá.
+
             if (meta.isNotReadable() || !kohaJson.has(meta.getKohaNativeName()) || kohaJson.isNull(meta.getKohaNativeName())) {
+                LOG.ok("Trace Mapper: Omitiendo atributo Koha '{0}' porque no es leíble o no está presente/nulo en el JSON.", meta.getKohaNativeName());
                 continue;
             }
+
             Object kohaNativeVal = kohaJson.get(meta.getKohaNativeName());
             Object connIdVal = convertKohaValueToConnIdValue(kohaNativeVal, meta);
+
             if (connIdVal != null) {
+                LOG.ok("Trace Mapper: Mapeando Koha '{0}' a ConnId '{1}' con valor: {2}", meta.getKohaNativeName(), meta.getConnIdName(), connIdVal);
                 builder.addAttribute(AttributeBuilder.build(meta.getConnIdName(), connIdVal));
+            } else {
+                LOG.ok("Trace Mapper: Valor convertido para ConnId '{0}' (desde Koha '{1}') es nulo. No se añadirá.", meta.getConnIdName(), meta.getKohaNativeName());
             }
         }
-        return builder.build();
+        ConnectorObject resultObject = builder.build();
+        LOG.ok("ConnectorObject (Categoría) construido: {0}", resultObject.toString());
+        return resultObject;
     }
 }
