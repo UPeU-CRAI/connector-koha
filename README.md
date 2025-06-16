@@ -35,7 +35,7 @@ Una vez instalado, puedes crear un nuevo recurso en Midpoint. Aquí tienes un ej
         
         <cfg:serviceAddress>http://TU_URL_DE_KOHA</cfg:serviceAddress>
 
-        <cfg:authMethod>OAUTH2</cfg:authMethod>
+        <cfg:authenticationMethodStrategy>OAUTH2</cfg:authenticationMethodStrategy>
         
         <cfg:clientId>TU_CLIENT_ID</cfg:clientId>
         <cfg:clientSecret>

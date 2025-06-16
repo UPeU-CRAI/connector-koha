@@ -54,7 +54,7 @@ public class KohaAuthenticator {
      */
     public CloseableHttpClient createAuthenticatedClient() {
         HttpRequestInterceptor authInterceptor;
-        String authMethod = configuration.getAuthMethod();
+        String authMethod = configuration.getAuthenticationMethodStrategy();
         boolean useOAuth2 = StringUtil.isNotBlank(configuration.getClientId()) && configuration.getClientSecret() != null;
 
         if (useOAuth2 && !"BASIC".equalsIgnoreCase(authMethod)) {
