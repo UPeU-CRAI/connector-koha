@@ -32,6 +32,21 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         return super.getServiceAddress();
     }
 
+    // === INICIO DE LA CORRECCIÓN ===
+    private String authenticationMethodStrategy;
+
+    @ConfigurationProperty(order = 15,
+            displayMessageKey = "authenticationMethodStrategy.display",
+            helpMessageKey = "authenticationMethodStrategy.help")
+    public String getAuthenticationMethodStrategy() {
+        return authenticationMethodStrategy;
+    }
+
+    public void setAuthenticationMethodStrategy(String authenticationMethodStrategy) {
+        this.authenticationMethodStrategy = authenticationMethodStrategy;
+    }
+    // === FIN DE LA CORRECCIÓN ===
+
     // === Autenticación BASIC ===
 
     @Override

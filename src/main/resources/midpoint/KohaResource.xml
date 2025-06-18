@@ -27,7 +27,8 @@
     <connectorConfiguration>
         <icfc:configurationProperties>
             <cfg:serviceAddress>http://koha.upeu.edu.pe</cfg:serviceAddress>
-            <cfg:authMethod>OAUTH2</cfg:authMethod>
+
+            <cfg:authenticationMethodStrategy>OAUTH2</cfg:authenticationMethodStrategy>
             <cfg:clientId>TU_CLIENT_ID</cfg:clientId>
             <cfg:clientSecret>
                 <t:clearValue>TU_CLIENT_SECRET</t:clearValue>
