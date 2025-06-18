@@ -77,14 +77,6 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         this.clientSecret = clientSecret;
     }
 
-    @Override
-    @ConfigurationProperty(order = 15, // Mantener un orden lógico si es necesario
-            displayMessageKey = "authenticationMethodStrategy.display", // Usar claves existentes si están definidas en superclase o crear nuevas
-            helpMessageKey = "authenticationMethodStrategy.help")
-    public String getAuthenticationMethodStrategy() {
-        return super.getAuthenticationMethodStrategy();
-    }
-
     // === Ocultar propiedades heredadas que no se usan en el formulario de configuración del conector en Midpoint ===
 
     @ConfigurationProperty(
