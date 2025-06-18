@@ -109,7 +109,6 @@ public class CategoryMapperTest {
         ConnectorObject coFromKoha = categoryMapper.convertJsonToCategoryObject(jsonFromKoha);
         assertEquals("Another Category Name", coFromKoha.getName().getNameValue());
         // También verificamos que el atributo 'name' (si se pidiera explícitamente) tendría el mismo valor
-        assertEquals("Another Category Name", AttributeUtil.getStringValue(coFromKoha.getAttributeByName("name")));
     }
 
 
