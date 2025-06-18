@@ -85,11 +85,6 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         return super.getAuthenticationMethodStrategy();
     }
 
-    @Override
-    public void setAuthenticationMethodStrategy(String authenticationMethodStrategy) {
-        super.setAuthenticationMethodStrategy(authenticationMethodStrategy);
-    }
-
     // === Ocultar propiedades heredadas que no se usan en el formulario de configuración del conector en Midpoint ===
 
     @ConfigurationProperty(
