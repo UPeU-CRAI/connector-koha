@@ -154,4 +154,68 @@ public class PatronMapperTest {
         ConnectorObject co = patronMapper.convertJsonToPatronObject(kohaJson);
         assertNull(co); // Debería retornar null según la lógica del mapper
     }
+
+    @Test
+    void testConvertJsonToPatronObject_BooleanAttributes() {
+        // patronMapper se inicializa en @BeforeEach
+        JSONObject kohaJson = new JSONObject();
+        kohaJson.put(PatronMapper.KOHA_PATRON_ID_NATIVE_NAME, "123B");
+        kohaJson.put("userid", "jboolean");
+        kohaJson.put("incorrect_address", true);
+        kohaJson.put("patron_card_lost", "0");
+        // Ejemplo de un booleano que podría no estar presente, BaseMapper debería manejarlo
+        // kohaJson.put("some_other_bool", JSONObject.NULL);
+
+        ConnectorObject co = patronMapper.convertJsonToPatronObject(kohaJson);
+
+        assertNotNull(co, "ConnectorObject no debería ser nulo.");
+        // Acceder a atributos booleanos
+        Attribute incorrectAddressAttr = co.getAttributeByName("incorrect_address");
+        assertNotNull(incorrectAddressAttr, "El atributo 'incorrect_address' no debería ser nulo.");
+        assertTrue(AttributeUtil.getBooleanValue(incorrectAddressAttr), "'incorrect_address' debería ser true.");
+
+        Attribute patronCardLostAttr = co.getAttributeByName("patron_card_lost");
+        assertNotNull(patronCardLostAttr, "El atributo 'patron_card_lost' no debería ser nulo.");
+        assertFalse(AttributeUtil.getBooleanValue(patronCardLostAttr), "'patron_card_lost' debería ser false.");
+
+        // Ejemplo: verificar un booleano que no estaba en el JSON
+        // assertNull(co.getAttributeByName("some_other_bool"), "Un atributo booleano no presente o explícitamente nulo debería ser null.");
+    }
+
+    @Test
+    void testConvertJsonToPatronObject_DateAttributes_Valid() {
+        // patronMapper se inicializa en @BeforeEach
+        JSONObject kohaJson = new JSONObject();
+        kohaJson.put(PatronMapper.KOHA_PATRON_ID_NATIVE_NAME, "124D");
+        kohaJson.put("userid", "jdatevalid");
+        kohaJson.put("date_of_birth", "1990-01-15");
+        kohaJson.put("expiry_date", "2025-12-31"); // Asumimos que Koha envía YYYY-MM-DD para fechas puras
+                                                 // Si Koha envía datetimes (e.g., "2025-12-31T10:00:00Z"),
+                                                 // y el tipo ConnId es solo fecha (String), el BaseMapper debería manejarlo.
+                                                 // Por ahora, BaseMapper.convertKohaValueToConnIdValue devuelve la cadena tal cual si es parseable como fecha/hora.
+                                                 // Si el atributo "expiry_date" en ATTRIBUTE_METADATA_MAP está como String.class, esto es correcto.
+
+        ConnectorObject co = patronMapper.convertJsonToPatronObject(kohaJson);
+
+        assertNotNull(co, "ConnectorObject no debería ser nulo.");
+        assertEquals("1990-01-15", AttributeUtil.getStringValue(co.getAttributeByName("date_of_birth")), "date_of_birth no coincide.");
+        assertEquals("2025-12-31", AttributeUtil.getStringValue(co.getAttributeByName("expiry_date")), "expiry_date no coincide.");
+    }
+
+    @Test
+    void testConvertJsonToPatronObject_DateAttributes_Invalid() {
+        // patronMapper se inicializa en @BeforeEach
+        JSONObject kohaJson = new JSONObject();
+        kohaJson.put(PatronMapper.KOHA_PATRON_ID_NATIVE_NAME, "125DI");
+        kohaJson.put("userid", "jdateinvalid");
+        kohaJson.put("date_of_birth", "INVALID-DATE-FORMAT");
+        kohaJson.put("expiry_date", "2024/01/01"); // Formato que BaseMapper considerará inválido y retornará null
+
+        ConnectorObject co = patronMapper.convertJsonToPatronObject(kohaJson);
+
+        assertNotNull(co, "ConnectorObject no debería ser nulo.");
+        // BaseMapper.convertKohaValueToConnIdValue devuelve null para formatos de fecha/datetime no parseables
+        assertNull(co.getAttributeByName("date_of_birth"), "date_of_birth con formato inválido debe ser null.");
+        assertNull(co.getAttributeByName("expiry_date"), "expiry_date con formato inválido debe ser null.");
+    }
 }

@@ -16,7 +16,7 @@ import org.identityconnectors.framework.common.exceptions.AlreadyExistsException
 import org.identityconnectors.framework.common.exceptions.ConnectionFailedException;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.exceptions.ConnectorIOException;
-// import org.identityconnectors.framework.common.exceptions.ConnectorRuntimeException; // Eliminada para pruebas
+import org.identityconnectors.framework.common.exceptions.ConnectorRuntimeException;
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.exceptions.PermissionDeniedException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
@@ -211,7 +211,7 @@ public abstract class AbstractKohaService {
             // This should be virtually impossible on any modern Java platform
             LOG.error(e, "UTF-8 encoding not supported, which is highly unusual.");
             // Usar RuntimeException como fallback temporal si ConnectorRuntimeException no se encuentra.
-            throw new RuntimeException("UTF-8 encoding not supported. Original error: " + e.getMessage(), e);
+            throw new ConnectorRuntimeException("UTF-8 encoding not supported. Original error: " + e.getMessage(), e);
         }
     }
 }

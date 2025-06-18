@@ -140,4 +140,31 @@ public class CategoryMapperTest {
         ConnectorObject co = categoryMapper.convertJsonToCategoryObject(kohaJson);
         assertNull(co);
     }
+
+    @Test
+    void testConvertJsonToCategoryObject_NameAttributeNotDuplicated() {
+        categoryMapper = new CategoryMapper(); // Asegurar inicialización si no es global o en @BeforeEach
+        JSONObject kohaJson = new JSONObject();
+        final String testUid = "TEST_UID_CAT";
+        final String testDescription = "Test Category Name";
+
+        kohaJson.put(CategoryMapper.KOHA_CATEGORY_ID_NATIVE_NAME, testUid);
+        kohaJson.put("description", testDescription); // 'description' de Koha es el 'Name' de ConnId para categorías
+        kohaJson.put("category_type", "SOMETYPE"); // Otro atributo para que el objeto no esté vacío
+
+        ConnectorObject co = categoryMapper.convertJsonToCategoryObject(kohaJson);
+
+        assertNotNull(co, "El ConnectorObject no debería ser nulo.");
+        assertEquals(testUid, co.getUid().getUidValue(), "El UID no coincide.");
+        assertEquals(testDescription, co.getName().getNameValue(), "El Name.NAME no coincide.");
+
+        // Verificar que el atributo "name" (el ConnId 'name') NO está presente en el conjunto de atributos,
+        // ya que su valor ya está en Name.NAME y la lógica modificada debería omitirlo.
+        assertNull(co.getAttributeByName("name"), "El atributo 'name' no debería estar duplicado en los atributos.");
+        // Para ser más explícito, también podemos verificar que el atributo 'description' (el nativo de Koha) tampoco esté.
+        assertNull(co.getAttributeByName("description"), "El atributo 'description' (nativo de Koha para nombre) no debería estar.");
+        // Pero sí debería estar cualquier otro atributo que se haya añadido:
+        assertNotNull(co.getAttributeByName("category_type"), "El atributo 'category_type' debería estar presente.");
+        assertEquals("SOMETYPE", AttributeUtil.getStringValue(co.getAttributeByName("category_type")));
+    }
 }
