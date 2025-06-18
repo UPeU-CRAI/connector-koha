@@ -8,31 +8,33 @@ import org.identityconnectors.framework.spi.ConfigurationProperty;
 /**
  * Configuración del conector REST para Koha.
  * Soporta autenticación BASIC y OAuth2 con credenciales de cliente.
+ * Las propiedades están ordenadas para una presentación lógica en la UI de Midpoint.
  */
 public class KohaConfiguration extends AbstractRestConfiguration {
 
     private static final Log LOG = Log.getLog(KohaConfiguration.class);
 
-    // === API Base ===
+    // === 1. Configuración Base de la API (Común a ambos métodos) ===
 
     @Override
-    @ConfigurationProperty(
-            displayMessageKey = "rest.config.trustAllCertificates.display",
-            helpMessageKey = "rest.config.trustAllCertificates.help",
-            order = 10)
-    public Boolean getTrustAllCertificates() {
-        return super.getTrustAllCertificates();
-    }
-
-    @Override
-    @ConfigurationProperty(order = 11,
+    @ConfigurationProperty(order = 10,
             displayMessageKey = "serviceAddress.display",
             helpMessageKey = "serviceAddress.help")
     public String getServiceAddress() {
         return super.getServiceAddress();
     }
 
-    // === INICIO DE LA CORRECCIÓN ===
+    @Override
+    @ConfigurationProperty(
+            order = 11,
+            displayMessageKey = "rest.config.trustAllCertificates.display",
+            helpMessageKey = "rest.config.trustAllCertificates.help")
+    public Boolean getTrustAllCertificates() {
+        return super.getTrustAllCertificates();
+    }
+
+    // === 2. Estrategia de Autenticación ===
+
     private String authenticationMethodStrategy;
 
     @ConfigurationProperty(order = 15,
@@ -45,9 +47,8 @@ public class KohaConfiguration extends AbstractRestConfiguration {
     public void setAuthenticationMethodStrategy(String authenticationMethodStrategy) {
         this.authenticationMethodStrategy = authenticationMethodStrategy;
     }
-    // === FIN DE LA CORRECCIÓN ===
 
-    // === Autenticación BASIC ===
+    // === 3. Grupo de Autenticación BASIC ===
 
     @Override
     @ConfigurationProperty(order = 20,
@@ -65,7 +66,7 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         return super.getPassword();
     }
 
-    // === Autenticación OAuth2 (Client Credentials) ===
+    // === 4. Grupo de Autenticación OAuth2 (Client Credentials) ===
 
     private String clientId;
     private GuardedString clientSecret;
@@ -92,24 +93,31 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         this.clientSecret = clientSecret;
     }
 
-    // === Ocultar propiedades heredadas que no se usan en el formulario de configuración del conector en Midpoint ===
+    // === 5. Ocultar propiedades heredadas que no se usan ===
+    // Anulamos los métodos de la clase base y les asignamos un 'order' muy alto
+    // para que no aparezcan en la parte principal del formulario de Midpoint.
 
-    @ConfigurationProperty(
-            displayMessageKey = "tokenName.display",
-            helpMessageKey = "tokenName.help",
-            order = Integer.MAX_VALUE // para que aparezca al final, o incluso se oculte
-    )
+    @Override
+    @ConfigurationProperty(order = 100, displayMessageKey = "proxy.display", helpMessageKey = "proxy.help")
+    public String getProxyHost() { return null; }
+
+    @Override
+    @ConfigurationProperty(order = 101, displayMessageKey = "proxyPort.display", helpMessageKey = "proxyPort.help")
+    public String getProxyPort() { return null; }
+
+    @Override
+    @ConfigurationProperty(order = 102, displayMessageKey = "authMethod.display", helpMessageKey = "authMethod.help")
+    public String getAuthMethod() { return null; }
+
+    @Override
+    @ConfigurationProperty(order = 103, displayMessageKey = "tokenName.display", helpMessageKey = "tokenName.help")
     public String getTokenName() {
         return null;
     }
 
-    @ConfigurationProperty(
-            displayMessageKey = "tokenValue.display",
-            helpMessageKey = "tokenValue.help",
-            order = Integer.MAX_VALUE
-    )
+    @Override
+    @ConfigurationProperty(order = 104, displayMessageKey = "tokenValue.display", helpMessageKey = "tokenValue.help")
     public GuardedString getTokenValue() {
         return null;
     }
-
 }
