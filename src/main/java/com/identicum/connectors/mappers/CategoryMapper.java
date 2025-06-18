@@ -141,6 +141,12 @@ public class CategoryMapper extends BaseMapper {
         for (AttributeMetadata meta : ATTRIBUTE_METADATA_MAP.values()) {
             LOG.ok("Trace Mapper: Considerando atributo Koha '{0}' (ConnId: '{1}')", meta.getKohaNativeName(), meta.getConnIdName());
 
+            // Omitir el que ya se usó para Name.NAME si su ConnIdName es "name" (el ConnId Name para Categorías)
+            if ("name".equals(meta.getConnIdName())) {
+                LOG.ok("Trace Mapper: Omitiendo el procesamiento explícito de '{0}' como atributo regular, ya manejado como Name.NAME.", meta.getConnIdName());
+                continue;
+            }
+
             // No omitir el atributo 'name' aquí si queremos que esté disponible tanto en Name.NAME como en el set de atributos.
             // La lógica de Name.NAME ya lo ha tomado de kohaJson.getString("description").
             // Si 'meta.getConnIdName()' es "name", se procesará y añadirá.

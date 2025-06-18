@@ -31,6 +31,11 @@
 			<artifactId>connector-rest</artifactId>
 			<version>1.5.2.0</version>
 		</dependency>
+		<dependency>
+			<groupId>net.tirasa.connid</groupId>
+			<artifactId>connector-framework-internal</artifactId>
+			<version>1.5.2.0</version>
+		</dependency>
 		<!-- Apache HttpClient 4.x -->
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
