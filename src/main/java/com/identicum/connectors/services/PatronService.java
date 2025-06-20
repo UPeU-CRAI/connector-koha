@@ -145,6 +145,4 @@ public class PatronService extends AbstractKohaService {
         return allResults;
     }
 
-    // Removed duplicated helper methods: callRequestWithEntity, callRequest, processResponseErrors, urlEncodeUTF8
-    // They are now inherited from AbstractKohaService.
 }
