@@ -1,7 +1,10 @@
 package com.identicum.connectors.services;
 
 import com.identicum.connectors.KohaFilter;
-import org.apache.http.client.methods.*;
+import org.apache.http.client.methods.HttpDelete;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpPut;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.logging.Log;
