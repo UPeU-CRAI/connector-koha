@@ -24,6 +24,10 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         return super.getServiceAddress();
     }
 
+    /**
+     * Valor de la propiedad {@code trustAllCertificates}. Cuando es {@code true}
+     * el cliente HTTP acepta cualquier certificado SSL.
+     */
     @Override
     @ConfigurationProperty(
             order = 11,

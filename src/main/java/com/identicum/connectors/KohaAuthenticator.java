@@ -6,8 +6,12 @@ import org.apache.http.NameValuePair;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.ssl.SSLContexts;
+import org.apache.http.ssl.TrustStrategy;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 import org.identityconnectors.common.StringUtil;
@@ -92,9 +96,22 @@ public class KohaAuthenticator {
             };
         }
 
-        return HttpClients.custom()
-                .addInterceptorLast(authInterceptor)
-                .build();
+        HttpClientBuilder builder = HttpClients.custom()
+                .addInterceptorLast(authInterceptor);
+
+        if (Boolean.TRUE.equals(configuration.getTrustAllCertificates())) {
+            try {
+                TrustStrategy acceptingTrustStrategy = (chain, authType) -> true;
+                builder.setSSLContext(SSLContexts.custom()
+                        .loadTrustMaterial(null, acceptingTrustStrategy)
+                        .build());
+                builder.setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE);
+            } catch (Exception e) {
+                LOG.warn("Error configurando TrustAllCertificates: {0}", e.getMessage());
+            }
+        }
+
+        return builder.build();
     }
 
     /**
