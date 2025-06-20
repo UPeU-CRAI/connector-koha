@@ -43,7 +43,6 @@ public class KohaFilterTranslator extends AbstractFilterTranslator<KohaFilter> {
             LOG.ok("Translated EqualsFilter on Name.NAME to KohaFilter.byName: {0}", singleValue);
             handled = true;
 
-            // --- INICIO DE LA CORRECCIÓN ---
             // Se reemplaza la referencia a la constante por el nombre del atributo en texto plano.
         } else if ("email".equals(attrName)) { // Filtro por email
             translatedFilter.setByEmail(singleValue);
@@ -57,7 +56,6 @@ public class KohaFilterTranslator extends AbstractFilterTranslator<KohaFilter> {
             LOG.ok("Translated EqualsFilter on 'cardnumber' to KohaFilter.byCardNumber: {0}", singleValue);
             handled = true;
         }
-        // --- FIN DE LA CORRECCIÓN ---
 
         if (handled) {
             return translatedFilter;

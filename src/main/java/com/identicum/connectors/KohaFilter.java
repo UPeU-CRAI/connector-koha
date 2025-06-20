@@ -22,7 +22,7 @@ public class KohaFilter {
     void setByCardNumber(String byCardNumber) { this.byCardNumber = byCardNumber; }
 
     public boolean hasCriteria() {
-        return byUid != null || byName != null || byEmail != null || byCardNumber != null; // <-- ACTUALIZAR ESTA LÍNEA
+        return byUid != null || byName != null || byEmail != null || byCardNumber != null;
     }
 
     @Override
