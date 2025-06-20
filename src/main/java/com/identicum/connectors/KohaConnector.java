@@ -225,13 +225,13 @@ public class KohaConnector
 
 	@Override
 	public void executeQuery(ObjectClass oClass, KohaFilter filter, ResultsHandler handler, OperationOptions options) {
-		LOG.ok("Iniciando executeQuery para ObjectClass {0}. Filtro Uid: {1}, Filtro Name: {2}, Filtro Email: {3}, Filtro Cardnumber: {4}, Options: {5}",
-				oClass,
-				(filter != null ? filter.getByUid() : "N/A"),
-				(filter != null ? filter.getByName() : "N/A"),
-				(filter != null && filter instanceof KohaFilter ? ((KohaFilter)filter).getByEmail() : "N/A"), // Assuming KohaFilter has getByEmail
-				(filter != null && filter instanceof KohaFilter ? ((KohaFilter)filter).getByCardNumber() : "N/A"), // Assuming KohaFilter has getByCardNumber
-				options);
+                LOG.ok("Iniciando executeQuery para ObjectClass {0}. Filtro Uid: {1}, Filtro Name: {2}, Filtro Email: {3}, Filtro Cardnumber: {4}, Options: {5}",
+                                oClass,
+                                (filter != null ? filter.getByUid() : "N/A"),
+                                (filter != null ? filter.getByName() : "N/A"),
+                                (filter != null ? filter.getByEmail() : "N/A"),
+                                (filter != null ? filter.getByCardNumber() : "N/A"),
+                                options);
 		try {
 			if (ObjectClass.ACCOUNT.is(oClass.getObjectClassValue())) {
 				if (filter != null && filter.getByUid() != null) {
