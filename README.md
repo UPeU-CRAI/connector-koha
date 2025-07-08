@@ -1,20 +1,77 @@
-<div contenteditable="true" translate="no" class="ProseMirror"><h1>Conector de Koha para Midpoint</h1><p>Conector de identidades para <strong>Evolveum Midpoint</strong> que permite la gestión del ciclo de vida de usuarios (Patrones) en el <strong>Sistema Integrado de Gestión de Bibliotecas (ILS) Koha</strong>.</p><p>Este conector utiliza la API REST de Koha y ha sido desarrollado siguiendo las mejores prácticas del Identity Connector Framework (ConnId).</p><h2>✨ Características Principales</h2><ul><li><p><strong>Gestión Completa de Patrones:</strong> Soporte para operaciones de Creación (<code>Create</code>), Lectura/Búsqueda (<code>Search</code>), Actualización (<code>Update</code>) y Eliminación (<code>Delete</code>).</p></li><li><p><strong>Autenticación Flexible:</strong> Compatibilidad con autenticación <strong>Básica</strong> (usuario/contraseña) y <strong>OAuth2</strong> (Client Credentials) para una integración segura.</p></li><li><p><strong>Arquitectura Robusta y Mejorada:</strong> El código sigue un diseño modular que separa responsabilidades (autenticación, servicios, mapeo de datos) y ha sido refactorizado para mejorar la robustez, el manejo de errores y la mantenibilidad.</p></li><li><p><strong>Búsqueda por Atributos:</strong> Permite buscar usuarios en Koha por UID, <code>userid</code>, <code>email</code> y <code>cardnumber</code> directamente desde Midpoint.</p></li></ul><h2>📋 Requisitos Previos</h2><ul><li><p><strong>Java</strong> Development<strong> Kit (JDK):</strong> Se recomienda usar versiones <strong>8, 11 o 17</strong>. El proyecto está configurado para compilar con Java 1.8, pero es compatible con versiones LTS más recientes. Versiones muy nuevas (ej. JDK 24+) pueden causar errores durante la fase de pruebas debido a incompatibilidades con las dependencias.</p></li><li><p><strong>Apache Maven:</strong> Versión 3.6.3 o superior.</p></li></ul><h2>🚀 Instalación</h2><ol><li><p><strong>Descargar el Conector:</strong> Ve a la sección de <a href="https://github.com/UPeU-CRAI/connector-koha/releases" title="null"><strong>Releases</strong></a> de este repositorio y descarga el archivo <code>.jar</code> de la última versión (ej. <code>connector-koha-1.0.1.jar</code>).</p></li><li><p><strong>Desplegar en Midpoint:</strong> Copia el archivo <code>.jar</code> descargado en el directorio de conectores de tu instancia de Midpoint:</p><pre><code>cp connector-koha-1.0.1.jar $MIDPOINT_HOME/var/icf-connectors/
-<br class="ProseMirror-trailingBreak"></code></pre></li><li><p><strong>Reiniciar Midpoint:</strong> Reinicia el servicio de Midpoint para que detecte el nuevo conector.</p></li></ol><h2>⚙️ Configuración del Recurso en Midpoint</h2><p>Una vez instalado, puedes crear un nuevo recurso en Midpoint. Aquí tienes un ejemplo de la sección <code>&lt;connectorConfiguration&gt;</code> que debes usar.</p><pre><code>&lt;connectorConfiguration&gt;
-    &lt;icfc:configurationProperties xmlns:icfc="[http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/connector-schema-3](http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/connector-schema-3)"
-                                  xmlns:cfg="[http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/connector-koha/com.identicum.connectors.KohaConnector](http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/connector-koha/com.identicum.connectors.KohaConnector)"&gt;
+# Conector de Koha para MidPoint
 
-        &lt;cfg:serviceAddress&gt;http://TU_URL_DE_KOHA&lt;/cfg:serviceAddress&gt;
+Conector de identidades para **Evolveum MidPoint** que gestiona el ciclo de vida de usuarios (Patrones) en el **Sistema Integrado de Gestión de Bibliotecas (ILS) Koha**. Utiliza la API REST de Koha y está desarrollado siguiendo las mejores prácticas del Identity Connector Framework (ConnId).
 
-        &lt;cfg:authenticationMethodStrategy&gt;OAUTH2&lt;/cfg:authenticationMethodStrategy&gt;
-        
-        &lt;cfg:clientId&gt;TU_CLIENT_ID&lt;/cfg:clientId&gt;
-        &lt;cfg:clientSecret&gt;
-            &lt;t:clearValue&gt;TU_CLIENT_SECRET&lt;/t:clearValue&gt;
-        &lt;/cfg:clientSecret&gt;
+## ✨ Características Principales
+- **Gestión completa de Patrones**: operaciones de `Create`, `Search`, `Update` y `Delete`.
+- **Autenticación flexible**: soporte de autenticación **Básica** (usuario/contraseña) y **OAuth2** (Client Credentials).
+- **Arquitectura robusta y modular**: código refactorizado para mayor robustez, manejo de errores y mantenibilidad.
+- **Búsqueda por atributos**: por UID, `userid`, `email` y `cardnumber` directamente desde MidPoint.
 
-        &lt;cfg:trustAllCertificates&gt;false&lt;/cfg:trustAllCertificates&gt;
-        
-    &lt;/icfc:configurationProperties&gt;
-&lt;/connectorConfiguration&gt;
-<br class="ProseMirror-trailingBreak"></code></pre><p>Para una guía completa sobre cómo mapear los atributos del <strong>Esquema de Extensión UPeU</strong> a los atributos de este conector, consulta la documentación del esquema.</p><h2>🏛️ Arquitectura del Conector</h2><p>El código fuente del conector sigue una arquitectura modular para separar responsabilidades:</p><ul><li><p><strong><code>KohaConnector.java</code></strong>: Actúa como el orquestador principal que implementa las interfaces de ConnId.</p></li><li><p><strong><code>KohaAuthenticator.java</code></strong>: Centraliza la lógica de autenticación.</p></li><li><p><strong>Paquete <code>services</code></strong>: Gestiona la comunicación con los endpoints específicos de la API de Koha, extendiendo funcionalidades de una clase base abstracta (<code>AbstractKohaService.java</code>) que maneja la lógica HTTP común y el manejo de errores mejorado.</p></li><li><p><strong>Paquete <code>mappers</code></strong>: Se encarga de la transformación de datos entre Midpoint y el formato JSON de Koha.</p></li></ul><h2>🐛 Troubleshooting</h2><p>Para obtener información de diagnóstico detallada, puedes habilitar el logging <code>TRACE</code> o <code>DEBUG</code> para este conector en Midpoint. Esto es especialmente útil si encuentras problemas durante la configuración o la ejecución de operaciones.</p><p>Añade la siguiente configuración a tu archivo de logging de Midpoint (generalmente <code>logback.xml</code> o un archivo similar referenciado en la configuración de logging de Midpoint):</p><pre><code>&lt;logger name="com.identicum.connectors" level="TRACE"/&gt;
-<br class="ProseMirror-trailingBreak"></code></pre><p>Opciones de nivel de log:</p><ul><li><p><code>ERROR</code>: Solo errores críticos que impiden el funcionamiento.</p></li><li><p><code>WARN</code>: Advertencias sobre situaciones potencialmente problemáticas.</p></li><li><p><code>INFO</code>: Mensajes informativos generales sobre el flujo de operaciones (por defecto para muchas operaciones del conector).</p></li><li><p><code>DEBUG</code>: Información detallada útil para depurar el flujo de control y las solicitudes/respuestas básicas.</p></li><li><p><code>TRACE</code>: El nivel más detallado, incluye payloads de solicitud/respuesta, transformaciones de atributos, etc. Puede generar mucho output.</p></li></ul><p>Revisa los logs de Midpoint para ver los mensajes detallados del conector. Esto te ayudará a ti o a los desarrolladores a entender qué está sucediendo.</p><h2>📜 Historial de Versiones</h2><h3>v1.0.1 (08 de Julio de 2025)</h3><ul><li><p><strong>FIX:</strong> Se corrigieron errores de compilación y ejecución de pruebas que impedían empaquetar el proyecto.</p></li><li><p><strong>FIX:</strong> Se ajustó la configuración de pruebas (<code>KohaConnectorIntegrationTest</code>) para usar inyección de dependencias de Mockito (<code>@InjectMocks</code>) y resolver <code>NullPointerException</code>.</p></li><li><p><strong>CHORE:</strong> Se actualizó la configuración de compilación y pruebas para ser compatible con JDK 17, resolviendo conflictos con versiones más recientes de Java.</p></li><li><p><strong>DOCS:</strong> Se añadió la sección de "Requisitos Previos" al <code>README.md</code> para especificar las versiones de Java compatibles.</p></li></ul><h3>v1.0.0</h3><ul><li><p>Lanzamiento inicial del conector.</p></li><li><p>Soporte completo para operaciones CRUD (Create, Read, Update, Delete) para Patrones de Koha.</p></li><li><p>Implementación de autenticación Básica y OAuth2 (Client Credentials).</p></li></ul><h2>⚖️ Licencia</h2><p>Este proyecto está bajo la Licencia Apache 2.0. Consulta el archivo <code>LICENSE</code> para más detalles.</p><h2>🤝 Contribuciones</h2><p>Las contribuciones son bienvenidas. Para cambios mayores, por favor, abre un "issue" primero para discutir lo que te gustaría cambiar.</p></div>
+## 📋 Requisitos Previos
+- **Java** Development Kit (JDK) **8**, **11** o **17** (LTS). Versiones muy nuevas (JDK 24+) pueden generar errores durante las pruebas.
+- **Apache Maven** 3.6.3 o superior.
+
+## 🚀 Instalación
+1. **Descargar el conector**: visita la sección [Releases](https://github.com/UPeU-CRAI/connector-koha/releases) y descarga el archivo `.jar` más reciente (por ejemplo, `connector-koha-1.0.1.jar`).
+2. **Desplegar en MidPoint**: copia el `.jar` en el directorio de conectores de tu instancia de MidPoint.
+   ```bash
+   cp connector-koha-1.0.1.jar $MIDPOINT_HOME/var/icf-connectors/
+   ```
+3. **Reiniciar MidPoint** para detectar el nuevo conector.
+
+## ⚙️ Configuración del Recurso en MidPoint
+Al crear un recurso en MidPoint, utiliza la siguiente sección de `connectorConfiguration`:
+```xml
+<connectorConfiguration>
+    <icfc:configurationProperties
+        xmlns:icfc="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/connector-schema-3"
+        xmlns:cfg="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/connector-koha/com.identicum.connectors.KohaConnector">
+        <cfg:serviceAddress>http://TU_URL_DE_KOHA</cfg:serviceAddress>
+        <cfg:authenticationMethodStrategy>OAUTH2</cfg:authenticationMethodStrategy>
+        <cfg:clientId>TU_CLIENT_ID</cfg:clientId>
+        <cfg:clientSecret>
+            <t:clearValue>TU_CLIENT_SECRET</t:clearValue>
+        </cfg:clientSecret>
+        <cfg:trustAllCertificates>false</cfg:trustAllCertificates>
+    </icfc:configurationProperties>
+</connectorConfiguration>
+```
+
+## 🏛️ Arquitectura del Conector
+- **`KohaConnector.java`**: orquestador principal que implementa las interfaces de ConnId.
+- **`KohaAuthenticator.java`**: centraliza la lógica de autenticación.
+- **Paquete `services`**: comunicación con la API REST de Koha y manejo HTTP común (clase base `AbstractKohaService.java`).
+- **Paquete `mappers`**: transformación de datos entre MidPoint y el formato JSON de Koha.
+
+## 🐛 Troubleshooting
+Para un diagnóstico detallado puedes activar el logging `TRACE` o `DEBUG` en MidPoint. Añade la siguiente configuración a tu `logback.xml` (o archivo de logging equivalente):
+```xml
+<logger name="com.identicum.connectors" level="TRACE"/>
+```
+Opciones de nivel de log:
+- `ERROR`: solo errores críticos.
+- `WARN`: advertencias de posibles problemas.
+- `INFO`: mensajes informativos generales.
+- `DEBUG`: información detallada útil para depurar.
+- `TRACE`: máximo nivel de detalle (incluye payloads de solicitud/respuesta).
+
+Revisa los logs de MidPoint para ver los mensajes emitidos por el conector.
+
+## 📜 Historial de Versiones
+### v1.0.1 (08 de julio de 2025)
+- **FIX:** se corrigieron errores de compilación y pruebas.
+- **FIX:** se ajustó la configuración de pruebas (`KohaConnectorIntegrationTest`) para usar inyección de dependencias con Mockito.
+- **CHORE:** se actualizó la configuración de compilación para compatibilidad con JDK 17.
+- **DOCS:** se añadió la sección de requisitos previos en este README.
+
+### v1.0.0
+- Lanzamiento inicial del conector.
+- Soporte completo para operaciones CRUD de Patrones de Koha.
+- Implementación de autenticación Básica y OAuth2.
+
+## ⚖️ Licencia
+Este proyecto está bajo la [Licencia Apache 2.0](LICENSE).
+
+## 🤝 Contribuciones
+Las contribuciones son bienvenidas. Para cambios mayores, abre primero un issue para discutir lo que deseas modificar.
