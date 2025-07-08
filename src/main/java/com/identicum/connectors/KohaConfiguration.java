@@ -101,25 +101,21 @@ public class KohaConfiguration extends AbstractRestConfiguration {
     // Anulamos los métodos de la clase base y les asignamos un 'order' muy alto
     // para que no aparezcan en la parte principal del formulario de Midpoint.
 
-    @Override
     @ConfigurationProperty(order = 100, displayMessageKey = "proxy.display", helpMessageKey = "proxy.help")
     public String getProxyHost() { return null; }
 
-    @Override
+    // Corregido: El tipo de retorno ahora es Integer para coincidir con la clase padre.
     @ConfigurationProperty(order = 101, displayMessageKey = "proxyPort.display", helpMessageKey = "proxyPort.help")
-    public String getProxyPort() { return null; }
+    public Integer getProxyPort() { return null; }
 
-    @Override
     @ConfigurationProperty(order = 102, displayMessageKey = "authMethod.display", helpMessageKey = "authMethod.help")
     public String getAuthMethod() { return null; }
 
-    @Override
     @ConfigurationProperty(order = 103, displayMessageKey = "tokenName.display", helpMessageKey = "tokenName.help")
     public String getTokenName() {
         return null;
     }
 
-    @Override
     @ConfigurationProperty(order = 104, displayMessageKey = "tokenValue.display", helpMessageKey = "tokenValue.help")
     public GuardedString getTokenValue() {
         return null;
