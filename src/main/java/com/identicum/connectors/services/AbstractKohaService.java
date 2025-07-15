@@ -16,12 +16,12 @@ import org.identityconnectors.framework.common.exceptions.AlreadyExistsException
 import org.identityconnectors.framework.common.exceptions.ConnectionFailedException;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.exceptions.ConnectorIOException;
-// import org.identityconnectors.framework.common.exceptions.ConnectorRuntimeException;
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.exceptions.PermissionDeniedException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.apache.http.client.HttpClient;
 
 import java.io.IOException;
 import java.io.InputStream;
