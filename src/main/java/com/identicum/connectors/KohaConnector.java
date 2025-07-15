@@ -7,6 +7,8 @@ import com.identicum.connectors.services.CategoryService;
 import com.identicum.connectors.services.PatronService;
 import com.evolveum.polygon.rest.AbstractRestConnector;
 import org.apache.http.impl.client.CloseableHttpClient;
+import com.identicum.connectors.services.HttpClientAdapter;
+import com.identicum.connectors.services.DefaultHttpClientAdapter;
 import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.framework.common.exceptions.ConfigurationException;
@@ -49,7 +51,8 @@ public class KohaConnector
 
 	private static final Log LOG = Log.getLog(KohaConnector.class);
 
-	private CloseableHttpClient httpClient;
+        private CloseableHttpClient httpClient;
+        private HttpClientAdapter httpAdapter;
 	private PatronService patronService;
 	private CategoryService categoryService;
 	private final PatronMapper patronMapper = new PatronMapper();
@@ -91,21 +94,22 @@ public class KohaConnector
 		}
 
 		LOG.ok("Inicializando componentes del conector...");
-		KohaAuthenticator authenticator = new KohaAuthenticator(getConfiguration());
-		this.httpClient = authenticator.createAuthenticatedClient(); // httpClient is created here
+                KohaAuthenticator authenticator = new KohaAuthenticator(getConfiguration());
+                this.httpClient = authenticator.createAuthenticatedClient();
+                this.httpAdapter = new DefaultHttpClientAdapter(this.httpClient);
 
 		try {
-			String serviceAddress = getConfiguration().getServiceAddress();
-			this.patronService = new PatronService(this.httpClient, serviceAddress);
-			this.categoryService = new CategoryService(this.httpClient, serviceAddress); // Re-introducido
+                        String serviceAddress = getConfiguration().getServiceAddress();
+                        this.patronService = new PatronService(this.httpAdapter, serviceAddress);
+                        this.categoryService = new CategoryService(this.httpAdapter, serviceAddress);
 			LOG.ok("Conector Koha inicializado con éxito.");
 		} catch (Exception e) { // Catch any exception during service initialization
-			LOG.error(e, "Error durante la inicialización de los servicios del conector después de crear httpClient.");
-			if (this.httpClient != null) {
-				try {
-					this.httpClient.close();
-					LOG.info("Cliente HTTP cerrado debido a un error durante la inicialización tardía del conector.");
-				} catch (IOException ioe) {
+                        LOG.error(e, "Error durante la inicialización de los servicios del conector después de crear httpClient.");
+                        if (this.httpAdapter != null) {
+                                try {
+                                        this.httpAdapter.close();
+                                        LOG.info("Cliente HTTP cerrado debido a un error durante la inicialización tardía del conector.");
+                                } catch (IOException ioe) {
 					LOG.error(ioe, "Error al intentar cerrar el cliente HTTP durante el manejo de errores de init.");
 					// Do not re-throw ioe here to avoid masking the original exception 'e'.
 					// Add 'e' as a suppressed exception to 'ioe' if desired, or log 'e' separately.
@@ -349,11 +353,11 @@ public class KohaConnector
 	@Override
 	public void dispose() {
 		LOG.ok("Liberando recursos del Conector Koha...");
-		try {
-			if (httpClient != null) {
-				httpClient.close();
-			}
-		} catch (IOException e) {
+                try {
+                        if (httpAdapter != null) {
+                                httpAdapter.close();
+                        }
+                } catch (IOException e) {
 			LOG.error("Error al cerrar el cliente HTTP: {0}", e.getMessage(), e);
 		}
 	}

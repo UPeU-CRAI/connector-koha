@@ -1,7 +1,7 @@
 package com.identicum.connectors.services;
 
 import com.identicum.connectors.KohaFilter;
-import org.apache.http.client.HttpClient;
+import com.identicum.connectors.services.HttpClientAdapter;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
@@ -25,7 +25,7 @@ public class PatronService extends AbstractKohaService {
 
     private static final Log LOG = Log.getLog(PatronService.class);
 
-    public PatronService(HttpClient httpClient, String serviceAddress) {
+    public PatronService(HttpClientAdapter httpClient, String serviceAddress) {
         super(httpClient, serviceAddress);
     }
 
