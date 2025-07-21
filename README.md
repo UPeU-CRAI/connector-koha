@@ -9,7 +9,7 @@ Conector de identidades para **Evolveum MidPoint** que gestiona el ciclo de vida
 - **Búsqueda por atributos**: por UID, `userid`, `email` y `cardnumber` directamente desde MidPoint.
 
 ## 📋 Requisitos Previos
-- **Java** Development Kit (JDK) **8**, **11** o **17** (LTS). Versiones muy nuevas (JDK 24+) pueden generar errores durante las pruebas.
+- **Java** Development Kit (JDK) **8**, **11** o **17** (LTS). Con Mockito ≥5.18 y Byte Buddy ≥1.17 es posible usar Java 24; de lo contrario es recomendable limitarse a JDK 8–17.
 - **Apache Maven** 3.6.3 o superior.
 
 ## 🚀 Instalación
