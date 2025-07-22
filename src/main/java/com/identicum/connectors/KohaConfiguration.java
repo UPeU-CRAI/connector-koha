@@ -4,6 +4,9 @@ import com.evolveum.polygon.rest.AbstractRestConfiguration;
 import org.identityconnectors.common.security.GuardedString;
 import org.identityconnectors.framework.spi.ConfigurationProperty;
 
+import java.util.Arrays;
+import java.util.List;
+
 /**
  * Configuración del conector Koha para MidPoint.
  * Esta clase define únicamente las propiedades necesarias para
@@ -101,6 +104,77 @@ public class KohaConfiguration extends AbstractRestConfiguration {
 
     public void setClientSecret(GuardedString clientSecret) {
         this.clientSecret = clientSecret;
+    }
+
+    /**
+     * Lista de propiedades locales expuestas por este configuration.
+     * Puede usarse desde el conector para evitar exponer los campos
+     * heredados de {@link AbstractRestConfiguration}.
+     */
+    public static List<String> getLocalConfigurationPropertyNames() {
+        return Arrays.asList(
+                "serviceAddress",
+                "trustAllCertificates",
+                "authenticationMethodStrategy",
+                "username",
+                "password",
+                "clientId",
+                "clientSecret"
+        );
+    }
+
+    // =====================================================================
+    // Métodos heredados anulados para ocultar propiedades no deseadas
+    // =====================================================================
+
+    @Override
+    public String getAuthMethod() {
+        return null; // Oculto en la UI
+    }
+
+    @Override
+    public void setAuthMethod(String authMethod) {
+        // Sin implementación para ocultar esta propiedad
+    }
+
+    @Override
+    public String getTokenName() {
+        return null;
+    }
+
+    @Override
+    public void setTokenName(String tokenName) {
+        // No exponer esta propiedad
+    }
+
+    @Override
+    public GuardedString getTokenValue() {
+        return null;
+    }
+
+    @Override
+    public void setTokenValue(GuardedString tokenValue) {
+        // Propiedad no usada
+    }
+
+    @Override
+    public String getProxy() {
+        return null;
+    }
+
+    @Override
+    public void setProxy(String proxy) {
+        // Propiedad no utilizada
+    }
+
+    @Override
+    public Integer getProxyPort() {
+        return null;
+    }
+
+    @Override
+    public void setProxyPort(Integer proxyPort) {
+        // Propiedad no utilizada
     }
 
     // === 5. Validación de la configuración ===
