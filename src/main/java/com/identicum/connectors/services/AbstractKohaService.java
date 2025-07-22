@@ -8,7 +8,6 @@ import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.conn.HttpHostConnectException;
 import org.apache.http.entity.ByteArrayEntity;
-import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.util.EntityUtils;
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.logging.Log;
@@ -16,10 +15,11 @@ import org.identityconnectors.framework.common.exceptions.AlreadyExistsException
 import org.identityconnectors.framework.common.exceptions.ConnectionFailedException;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.exceptions.ConnectorIOException;
-// import org.identityconnectors.framework.common.exceptions.ConnectorRuntimeException;
 import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
 import org.identityconnectors.framework.common.exceptions.PermissionDeniedException;
 import org.identityconnectors.framework.common.exceptions.UnknownUidException;
+
+import com.identicum.connectors.services.HttpClientAdapter;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -34,10 +34,10 @@ import java.util.zip.GZIPInputStream;
 public abstract class AbstractKohaService {
 
     private static final Log LOG = Log.getLog(AbstractKohaService.class);
-    protected final CloseableHttpClient httpClient;
+    protected final HttpClientAdapter httpClient;
     protected final String serviceAddress;
 
-    public AbstractKohaService(CloseableHttpClient httpClient, String serviceAddress) {
+    public AbstractKohaService(HttpClientAdapter httpClient, String serviceAddress) {
         this.httpClient = httpClient;
         this.serviceAddress = serviceAddress;
     }

@@ -5,7 +5,7 @@ import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPut;
-import org.apache.http.impl.client.CloseableHttpClient;
+import com.identicum.connectors.services.HttpClientAdapter;
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
@@ -28,7 +28,7 @@ public class CategoryService extends AbstractKohaService {
     private static final Log LOG = Log.getLog(CategoryService.class);
     // API_BASE_PATH and ENDPOINT are handled by AbstractKohaService now
 
-    public CategoryService(CloseableHttpClient httpClient, String serviceAddress) {
+    public CategoryService(HttpClientAdapter httpClient, String serviceAddress) {
         super(httpClient, serviceAddress);
     }
 

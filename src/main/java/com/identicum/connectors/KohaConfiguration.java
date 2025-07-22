@@ -1,44 +1,43 @@
 package com.identicum.connectors;
 
 import com.evolveum.polygon.rest.AbstractRestConfiguration;
-import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.common.security.GuardedString;
 import org.identityconnectors.framework.spi.ConfigurationProperty;
 
 /**
- * Configuración del conector REST para Koha.
- * Soporta autenticación BASIC y OAuth2 con credenciales de cliente.
- * Las propiedades están ordenadas para una presentación lógica en la UI de Midpoint.
+ * Configuración del conector Koha para MidPoint.
+ * Esta clase define únicamente las propiedades necesarias para
+ * el conector, organizadas en grupos lógicos para la UI.
  */
 public class KohaConfiguration extends AbstractRestConfiguration {
 
-    private static final Log LOG = Log.getLog(KohaConfiguration.class);
+    // === 1. Configuración Base de la API ===
+    private String serviceAddress;
+    private Boolean trustAllCertificates;
 
-    // === 1. Configuración Base de la API (Común a ambos métodos) ===
-
-    @Override
     @ConfigurationProperty(order = 10,
             displayMessageKey = "serviceAddress.display",
             helpMessageKey = "serviceAddress.help")
     public String getServiceAddress() {
-        return super.getServiceAddress();
+        return serviceAddress;
     }
 
-    /**
-     * Valor de la propiedad {@code trustAllCertificates}. Cuando es {@code true}
-     * el cliente HTTP acepta cualquier certificado SSL.
-     */
-    @Override
-    @ConfigurationProperty(
-            order = 11,
+    public void setServiceAddress(String serviceAddress) {
+        this.serviceAddress = serviceAddress;
+    }
+
+    @ConfigurationProperty(order = 11,
             displayMessageKey = "rest.config.trustAllCertificates.display",
             helpMessageKey = "rest.config.trustAllCertificates.help")
     public Boolean getTrustAllCertificates() {
-        return super.getTrustAllCertificates();
+        return trustAllCertificates;
     }
 
-    // === 2. Estrategia de Autenticación ===
+    public void setTrustAllCertificates(Boolean trustAllCertificates) {
+        this.trustAllCertificates = trustAllCertificates;
+    }
 
+    // === 2. Autenticación general ===
     private String authenticationMethodStrategy;
 
     @ConfigurationProperty(order = 15,
@@ -52,26 +51,33 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         this.authenticationMethodStrategy = authenticationMethodStrategy;
     }
 
-    // === 3. Grupo de Autenticación BASIC ===
+    // === 3. Autenticación BASIC ===
+    private String username;
+    private GuardedString password;
 
-    @Override
     @ConfigurationProperty(order = 20,
             displayMessageKey = "username.display",
             helpMessageKey = "username.help")
     public String getUsername() {
-        return super.getUsername();
+        return username;
     }
 
-    @Override
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
     @ConfigurationProperty(order = 21, confidential = true,
             displayMessageKey = "password.display",
             helpMessageKey = "password.help")
     public GuardedString getPassword() {
-        return super.getPassword();
+        return password;
     }
 
-    // === 4. Grupo de Autenticación OAuth2 (Client Credentials) ===
+    public void setPassword(GuardedString password) {
+        this.password = password;
+    }
 
+    // === 4. Autenticación OAuth2 (Client Credentials) ===
     private String clientId;
     private GuardedString clientSecret;
 
@@ -97,31 +103,15 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         this.clientSecret = clientSecret;
     }
 
-    // === 5. Ocultar propiedades heredadas que no se usan ===
-    // Anulamos los métodos de la clase base y les asignamos un 'order' muy alto
-    // para que no aparezcan en la parte principal del formulario de Midpoint.
-
+    // === 5. Validación de la configuración ===
     @Override
-    @ConfigurationProperty(order = 100, displayMessageKey = "proxy.display", helpMessageKey = "proxy.help")
-    public String getProxyHost() { return null; }
-
-    @Override
-    @ConfigurationProperty(order = 101, displayMessageKey = "proxyPort.display", helpMessageKey = "proxyPort.help")
-    public String getProxyPort() { return null; }
-
-    @Override
-    @ConfigurationProperty(order = 102, displayMessageKey = "authMethod.display", helpMessageKey = "authMethod.help")
-    public String getAuthMethod() { return null; }
-
-    @Override
-    @ConfigurationProperty(order = 103, displayMessageKey = "tokenName.display", helpMessageKey = "tokenName.help")
-    public String getTokenName() {
-        return null;
-    }
-
-    @Override
-    @ConfigurationProperty(order = 104, displayMessageKey = "tokenValue.display", helpMessageKey = "tokenValue.help")
-    public GuardedString getTokenValue() {
-        return null;
+    public void validate() {
+        if (serviceAddress == null || serviceAddress.trim().isEmpty()) {
+            throw new IllegalArgumentException("La dirección del servicio (serviceAddress) no puede estar vacía.");
+        }
+        if (authenticationMethodStrategy == null || authenticationMethodStrategy.trim().isEmpty()) {
+            throw new IllegalArgumentException("La estrategia de autenticación (authenticationMethodStrategy) es obligatoria.");
+        }
+        // Puedes agregar más validaciones si lo necesitas
     }
 }
