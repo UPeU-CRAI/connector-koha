@@ -103,6 +103,58 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         this.clientSecret = clientSecret;
     }
 
+    // === 4.b Propiedades heredadas sin exponer en UI ===
+
+    @Override
+    public String getProxy() {
+        return super.getProxy();
+    }
+
+    @Override
+    public void setProxy(String proxy) {
+        super.setProxy(proxy);
+    }
+
+    @Override
+    public Integer getProxyPort() {
+        return super.getProxyPort();
+    }
+
+    @Override
+    public void setProxyPort(Integer proxyPort) {
+        super.setProxyPort(proxyPort);
+    }
+
+    @Override
+    public String getTokenName() {
+        return super.getTokenName();
+    }
+
+    @Override
+    public void setTokenName(String tokenName) {
+        super.setTokenName(tokenName);
+    }
+
+    @Override
+    public GuardedString getTokenValue() {
+        return super.getTokenValue();
+    }
+
+    @Override
+    public void setTokenValue(GuardedString tokenValue) {
+        super.setTokenValue(tokenValue);
+    }
+
+    @Override
+    public String getAuthMethod() {
+        return super.getAuthMethod();
+    }
+
+    @Override
+    public void setAuthMethod(String authMethod) {
+        super.setAuthMethod(authMethod);
+    }
+
     // === 5. Validación de la configuración ===
     @Override
     public void validate() {
