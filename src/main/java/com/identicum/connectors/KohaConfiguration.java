@@ -114,4 +114,22 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         }
         // Puedes agregar más validaciones si lo necesitas
     }
+
+    /**
+     * Sobrescribe el método para controlar las propiedades de configuración que se exponen en la UI de MidPoint.
+     * Este método filtra las propiedades heredadas y solo expone las definidas explícitamente en esta clase.
+     *
+     * @return Un array con los nombres de las propiedades de configuración que se mostrarán en la UI.
+     */
+    public String[] getConfigurationProperties() {
+        return new String[]{
+                "serviceAddress",
+                "trustAllCertificates",
+                "authenticationMethodStrategy",
+                "username",
+                "password",
+                "clientId",
+                "clientSecret"
+        };
+    }
 }
