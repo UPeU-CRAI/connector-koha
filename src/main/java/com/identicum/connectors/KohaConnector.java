@@ -5,7 +5,7 @@ import com.identicum.connectors.mappers.PatronMapper;
 import com.identicum.connectors.model.AttributeMetadata;
 import com.identicum.connectors.services.CategoryService;
 import com.identicum.connectors.services.PatronService;
-import com.evolveum.polygon.rest.AbstractRestConnector;
+import org.identityconnectors.framework.spi.AbstractConnector;
 import org.apache.http.impl.client.CloseableHttpClient;
 import com.identicum.connectors.services.HttpClientAdapter;
 import com.identicum.connectors.services.DefaultHttpClientAdapter;
@@ -46,7 +46,7 @@ import java.util.stream.Collectors;
 
 @ConnectorClass(displayNameKey = "connector.identicum.rest.display", configurationClass = KohaConfiguration.class)
 public class KohaConnector
-		extends AbstractRestConnector<KohaConfiguration>
+                extends AbstractConnector<KohaConfiguration>
 		implements CreateOp, UpdateOp, SchemaOp, SearchOp<KohaFilter>, DeleteOp, TestOp {
 
 	private static final Log LOG = Log.getLog(KohaConnector.class);
@@ -74,24 +74,23 @@ public class KohaConnector
 			throw new ConfigurationException("Authentication method (authenticationMethodStrategy) must be provided.");
 		}
 
-		if ("BASIC".equalsIgnoreCase(authenticationMethodStrategy)) {
-			if (StringUtil.isBlank(getConfiguration().getUsername())) {
-				throw new ConfigurationException("Username must be provided for BASIC authentication.");
-			}
-			// Optional: Check password, GuardedString needs specific handling for emptiness if desired.
-			// if (getConfiguration().getPassword() == null) { // Or a more specific check
-			//    throw new ConfigurationException("Password must be provided for BASIC authentication.");
-			// }
-		} else if ("OAUTH2".equalsIgnoreCase(authenticationMethodStrategy)) {
-			if (StringUtil.isBlank(getConfiguration().getClientId())) {
-				throw new ConfigurationException("Client ID must be provided for OAUTH2 authentication.");
-			}
-			if (getConfiguration().getClientSecret() == null) { // GuardedString is null if not provided
-				throw new ConfigurationException("Client Secret must be provided for OAUTH2 authentication.");
-			}
-		} else {
-			throw new ConfigurationException("Invalid authentication method (authenticationMethodStrategy) specified. Must be 'BASIC' or 'OAUTH2'.");
-		}
+                if ("BASIC".equalsIgnoreCase(authenticationMethodStrategy)) {
+                        if (StringUtil.isBlank(getConfiguration().getUsername())) {
+                                throw new ConfigurationException("Username must be provided for BASIC authentication.");
+                        }
+                        if (StringUtil.isBlank(getConfiguration().getPassword())) {
+                                throw new ConfigurationException("Password must be provided for BASIC authentication.");
+                        }
+                } else if ("OAUTH2".equalsIgnoreCase(authenticationMethodStrategy)) {
+                        if (StringUtil.isBlank(getConfiguration().getClientId())) {
+                                throw new ConfigurationException("Client ID must be provided for OAUTH2 authentication.");
+                        }
+                        if (StringUtil.isBlank(getConfiguration().getClientSecret())) {
+                                throw new ConfigurationException("Client Secret must be provided for OAUTH2 authentication.");
+                        }
+                } else {
+                        throw new ConfigurationException("Invalid authentication method (authenticationMethodStrategy) specified. Must be 'BASIC' or 'OAUTH2'.");
+                }
 
 		LOG.ok("Inicializando componentes del conector...");
                 KohaAuthenticator authenticator = new KohaAuthenticator(getConfiguration());

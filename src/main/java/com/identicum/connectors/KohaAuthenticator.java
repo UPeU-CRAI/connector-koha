@@ -16,7 +16,6 @@ import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.logging.Log;
-import org.identityconnectors.common.security.GuardedString;
 import org.identityconnectors.framework.common.exceptions.ConfigurationException;
 import org.identityconnectors.framework.common.exceptions.ConnectorIOException;
 import org.json.JSONException;
@@ -59,7 +58,7 @@ public class KohaAuthenticator {
     public CloseableHttpClient createAuthenticatedClient() {
         HttpRequestInterceptor authInterceptor;
         String authMethod = configuration.getAuthenticationMethodStrategy();
-        boolean useOAuth2 = StringUtil.isNotBlank(configuration.getClientId()) && configuration.getClientSecret() != null;
+        boolean useOAuth2 = StringUtil.isNotBlank(configuration.getClientId()) && StringUtil.isNotBlank(configuration.getClientSecret());
 
         if (useOAuth2 && !"BASIC".equalsIgnoreCase(authMethod)) {
             // Configurar interceptor para OAuth2
@@ -75,16 +74,14 @@ public class KohaAuthenticator {
             // Configurar interceptor para Basic Auth
             LOG.ok("AUTH: Configurando cliente HTTP para autenticación BASIC.");
             final String username = configuration.getUsername();
-            final GuardedString password = configuration.getPassword();
+            final String password = configuration.getPassword();
 
-            if (StringUtil.isBlank(username) || password == null) {
+            if (StringUtil.isBlank(username) || StringUtil.isBlank(password)) {
                 throw new ConfigurationException("El método de autenticación es BASIC pero el usuario/contraseña no están configurados.");
             }
 
             authInterceptor = (request, context) -> {
-                final StringBuilder passBuilder = new StringBuilder();
-                password.access(passBuilder::append);
-                String auth = username + ":" + passBuilder.toString();
+                String auth = username + ":" + password;
                 String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
                 request.setHeader("Authorization", "Basic " + encodedAuth);
             };
@@ -99,7 +96,7 @@ public class KohaAuthenticator {
         HttpClientBuilder builder = HttpClients.custom()
                 .addInterceptorLast(authInterceptor);
 
-        if (Boolean.TRUE.equals(configuration.getTrustAllCertificates())) {
+        if (configuration.getTrustAllCertificates()) {
             try {
                 TrustStrategy acceptingTrustStrategy = (chain, authType) -> true;
                 builder.setSSLContext(SSLContexts.custom()
@@ -139,13 +136,10 @@ public class KohaAuthenticator {
                 tokenRequest.setHeader("Content-Type", "application/x-www-form-urlencoded");
                 tokenRequest.setHeader("Accept", "application/json");
 
-                final StringBuilder secretBuilder = new StringBuilder();
-                configuration.getClientSecret().access(secretBuilder::append);
-
                 List<NameValuePair> formParams = new ArrayList<>();
                 formParams.add(new BasicNameValuePair("grant_type", "client_credentials"));
                 formParams.add(new BasicNameValuePair("client_id", configuration.getClientId()));
-                formParams.add(new BasicNameValuePair("client_secret", secretBuilder.toString()));
+                formParams.add(new BasicNameValuePair("client_secret", configuration.getClientSecret()));
 
                 tokenRequest.setEntity(new UrlEncodedFormEntity(formParams, StandardCharsets.UTF_8));
 
