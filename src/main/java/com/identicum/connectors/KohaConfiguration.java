@@ -1,23 +1,33 @@
 package com.identicum.connectors;
 
-import com.evolveum.polygon.rest.AbstractRestConfiguration;
 import org.identityconnectors.common.security.GuardedString;
+import org.identityconnectors.framework.common.objects.ConnectorMessages; // <-- IMPORT NECESARIO
+import org.identityconnectors.framework.spi.Configuration;
 import org.identityconnectors.framework.spi.ConfigurationProperty;
 
 /**
- * Configuración del conector Koha para MidPoint.
- * Esta clase define únicamente las propiedades necesarias para
- * el conector, organizadas en grupos lógicos para la UI.
+ * Configuración autocontenida y mínima para el conector Koha.
+ * Implementa la interfaz Configuration, un requisito del framework ConnId.
  */
-public class KohaConfiguration extends AbstractRestConfiguration {
+public class KohaConfiguration implements Configuration {
 
-    // === 1. Configuración Base de la API ===
     private String serviceAddress;
-    private Boolean trustAllCertificates;
+    private boolean trustAllCertificates;
+    private String authenticationMethodStrategy;
+    private String username;
+    private GuardedString password;
+    private String clientId;
+    private GuardedString clientSecret;
+
+    // Campo para almacenar los mensajes del conector inyectados por el framework
+    private ConnectorMessages connectorMessages;
+
+    // ... (todos los getters y setters para las propiedades de configuración permanecen igual)
 
     @ConfigurationProperty(order = 10,
             displayMessageKey = "serviceAddress.display",
-            helpMessageKey = "serviceAddress.help")
+            helpMessageKey = "serviceAddress.help",
+            required = true)
     public String getServiceAddress() {
         return serviceAddress;
     }
@@ -29,20 +39,18 @@ public class KohaConfiguration extends AbstractRestConfiguration {
     @ConfigurationProperty(order = 11,
             displayMessageKey = "rest.config.trustAllCertificates.display",
             helpMessageKey = "rest.config.trustAllCertificates.help")
-    public Boolean getTrustAllCertificates() {
+    public boolean getTrustAllCertificates() {
         return trustAllCertificates;
     }
 
-    public void setTrustAllCertificates(Boolean trustAllCertificates) {
+    public void setTrustAllCertificates(boolean trustAllCertificates) {
         this.trustAllCertificates = trustAllCertificates;
     }
 
-    // === 2. Autenticación general ===
-    private String authenticationMethodStrategy;
-
     @ConfigurationProperty(order = 15,
             displayMessageKey = "authenticationMethodStrategy.display",
-            helpMessageKey = "authenticationMethodStrategy.help")
+            helpMessageKey = "authenticationMethodStrategy.help",
+            required = true)
     public String getAuthenticationMethodStrategy() {
         return authenticationMethodStrategy;
     }
@@ -50,10 +58,6 @@ public class KohaConfiguration extends AbstractRestConfiguration {
     public void setAuthenticationMethodStrategy(String authenticationMethodStrategy) {
         this.authenticationMethodStrategy = authenticationMethodStrategy;
     }
-
-    // === 3. Autenticación BASIC ===
-    private String username;
-    private GuardedString password;
 
     @ConfigurationProperty(order = 20,
             displayMessageKey = "username.display",
@@ -66,7 +70,8 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         this.username = username;
     }
 
-    @ConfigurationProperty(order = 21, confidential = true,
+    @ConfigurationProperty(order = 21,
+            confidential = true,
             displayMessageKey = "password.display",
             helpMessageKey = "password.help")
     public GuardedString getPassword() {
@@ -76,10 +81,6 @@ public class KohaConfiguration extends AbstractRestConfiguration {
     public void setPassword(GuardedString password) {
         this.password = password;
     }
-
-    // === 4. Autenticación OAuth2 (Client Credentials) ===
-    private String clientId;
-    private GuardedString clientSecret;
 
     @ConfigurationProperty(order = 30,
             displayMessageKey = "koha.config.clientId.display",
@@ -92,7 +93,8 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         this.clientId = clientId;
     }
 
-    @ConfigurationProperty(order = 31, confidential = true,
+    @ConfigurationProperty(order = 31,
+            confidential = true,
             displayMessageKey = "koha.config.clientSecret.display",
             helpMessageKey = "koha.config.clientSecret.help")
     public GuardedString getClientSecret() {
@@ -103,7 +105,9 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         this.clientSecret = clientSecret;
     }
 
-    // === 5. Validación de la configuración ===
+    /**
+     * Valida que la configuración proporcionada sea coherente y completa.
+     */
     @Override
     public void validate() {
         if (serviceAddress == null || serviceAddress.trim().isEmpty()) {
@@ -112,6 +116,32 @@ public class KohaConfiguration extends AbstractRestConfiguration {
         if (authenticationMethodStrategy == null || authenticationMethodStrategy.trim().isEmpty()) {
             throw new IllegalArgumentException("La estrategia de autenticación (authenticationMethodStrategy) es obligatoria.");
         }
-        // Puedes agregar más validaciones si lo necesitas
+        if ("BASIC".equalsIgnoreCase(authenticationMethodStrategy)) {
+            if (username == null || username.trim().isEmpty()) {
+                throw new IllegalArgumentException("El nombre de usuario (username) es requerido para la autenticación BASIC.");
+            }
+        } else if ("OAUTH2".equalsIgnoreCase(authenticationMethodStrategy)) {
+            if (clientId == null || clientId.trim().isEmpty()) {
+                throw new IllegalArgumentException("El Client ID es requerido para la autenticación OAUTH2.");
+            }
+        }
+    }
+
+    /**
+     * Método requerido por la interfaz Configuration para inyectar
+     * el manejador de mensajes del conector.
+     * @param connectorMessages El objeto que maneja los mensajes localizados.
+     */
+    @Override
+    public void setConnectorMessages(ConnectorMessages connectorMessages) {
+        this.connectorMessages = connectorMessages;
+    }
+
+    /**
+     * Getter para el manejador de mensajes.
+     * @return El manejador de mensajes del conector.
+     */
+    public ConnectorMessages getConnectorMessages() {
+        return connectorMessages;
     }
 }
