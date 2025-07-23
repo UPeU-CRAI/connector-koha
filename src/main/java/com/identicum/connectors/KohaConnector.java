@@ -5,7 +5,6 @@ import com.identicum.connectors.mappers.PatronMapper;
 import com.identicum.connectors.model.AttributeMetadata;
 import com.identicum.connectors.services.CategoryService;
 import com.identicum.connectors.services.PatronService;
-import com.evolveum.polygon.rest.AbstractRestConnector;
 import org.apache.http.impl.client.CloseableHttpClient;
 import com.identicum.connectors.services.HttpClientAdapter;
 import com.identicum.connectors.services.DefaultHttpClientAdapter;
@@ -29,7 +28,8 @@ import org.identityconnectors.framework.common.objects.Schema;
 import org.identityconnectors.framework.common.objects.SchemaBuilder;
 import org.identityconnectors.framework.common.objects.Uid;
 import org.identityconnectors.framework.common.objects.filter.FilterTranslator;
-import org.identityconnectors.framework.spi.ConnectorClass;
+import org.identityconnectors.framework.spi.ConfigurationClass;
+import org.identityconnectors.framework.spi.Connector;
 import org.identityconnectors.framework.spi.operations.CreateOp;
 import org.identityconnectors.framework.spi.operations.DeleteOp;
 import org.identityconnectors.framework.spi.operations.SchemaOp;
@@ -44,12 +44,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-@ConnectorClass(displayNameKey = "connector.identicum.rest.display", configurationClass = KohaConfiguration.class)
+@ConfigurationClass(configurationClass = KohaConfiguration.class)
 public class KohaConnector
-		extends AbstractRestConnector<KohaConfiguration>
-		implements CreateOp, UpdateOp, SchemaOp, SearchOp<KohaFilter>, DeleteOp, TestOp {
+                implements Connector, CreateOp, UpdateOp, SchemaOp, SearchOp<KohaFilter>, DeleteOp, TestOp {
 
-	private static final Log LOG = Log.getLog(KohaConnector.class);
+        private static final Log LOG = Log.getLog(KohaConnector.class);
+
+        private KohaConfiguration configuration;
 
         private CloseableHttpClient httpClient;
         private HttpClientAdapter httpAdapter;
@@ -60,9 +61,9 @@ public class KohaConnector
 
 	private Schema connectorSchema = null;
 
-	@Override
-	public void init(org.identityconnectors.framework.spi.Configuration configuration) {
-		super.init(configuration);
+        @Override
+        public void init(org.identityconnectors.framework.spi.Configuration configuration) {
+                this.configuration = (KohaConfiguration) configuration;
 
 		if (StringUtil.isBlank(getConfiguration().getServiceAddress())) {
 			throw new ConfigurationException("Service address (serviceAddress) must be provided.");
@@ -78,17 +79,17 @@ public class KohaConnector
 			if (StringUtil.isBlank(getConfiguration().getUsername())) {
 				throw new ConfigurationException("Username must be provided for BASIC authentication.");
 			}
-			// Optional: Check password, GuardedString needs specific handling for emptiness if desired.
-			// if (getConfiguration().getPassword() == null) { // Or a more specific check
-			//    throw new ConfigurationException("Password must be provided for BASIC authentication.");
-			// }
-		} else if ("OAUTH2".equalsIgnoreCase(authenticationMethodStrategy)) {
-			if (StringUtil.isBlank(getConfiguration().getClientId())) {
-				throw new ConfigurationException("Client ID must be provided for OAUTH2 authentication.");
-			}
-			if (getConfiguration().getClientSecret() == null) { // GuardedString is null if not provided
-				throw new ConfigurationException("Client Secret must be provided for OAUTH2 authentication.");
-			}
+                        // Optional: Validate password is not blank if stricter checks are desired.
+                        // if (StringUtil.isBlank(getConfiguration().getPassword())) {
+                        //    throw new ConfigurationException("Password must be provided for BASIC authentication.");
+                        // }
+                } else if ("OAUTH2".equalsIgnoreCase(authenticationMethodStrategy)) {
+                        if (StringUtil.isBlank(getConfiguration().getClientId())) {
+                                throw new ConfigurationException("Client ID must be provided for OAUTH2 authentication.");
+                        }
+                        if (StringUtil.isBlank(getConfiguration().getClientSecret())) {
+                                throw new ConfigurationException("Client Secret must be provided for OAUTH2 authentication.");
+                        }
 		} else {
 			throw new ConfigurationException("Invalid authentication method (authenticationMethodStrategy) specified. Must be 'BASIC' or 'OAUTH2'.");
 		}
@@ -351,16 +352,21 @@ public class KohaConnector
 	}
 
 	@Override
-	public void dispose() {
-		LOG.ok("Liberando recursos del Conector Koha...");
+        public void dispose() {
+                LOG.ok("Liberando recursos del Conector Koha...");
                 try {
                         if (httpAdapter != null) {
                                 httpAdapter.close();
                         }
                 } catch (IOException e) {
-			LOG.error("Error al cerrar el cliente HTTP: {0}", e.getMessage(), e);
-		}
-	}
+                        LOG.error("Error al cerrar el cliente HTTP: {0}", e.getMessage(), e);
+                }
+        }
+
+        @Override
+        public KohaConfiguration getConfiguration() {
+                return configuration;
+        }
 
 	private ObjectClassInfo buildObjectClassInfo(String objectClassType,
 	                                             String nativeIdAttributeName,

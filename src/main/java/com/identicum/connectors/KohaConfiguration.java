@@ -1,19 +1,17 @@
 package com.identicum.connectors;
 
-import com.evolveum.polygon.rest.AbstractRestConfiguration;
-import org.identityconnectors.common.security.GuardedString;
 import org.identityconnectors.framework.spi.ConfigurationProperty;
+import java.util.Arrays;
+import java.util.List;
 
 /**
- * Configuración del conector Koha para MidPoint.
- * Esta clase define únicamente las propiedades necesarias para
- * el conector, organizadas en grupos lógicos para la UI.
+ * Configuración autocontenida y mínima para el conector Koha.
  */
-public class KohaConfiguration extends AbstractRestConfiguration {
+public class KohaConfiguration {
 
     // === 1. Configuración Base de la API ===
     private String serviceAddress;
-    private Boolean trustAllCertificates;
+    private boolean trustAllCertificates;
 
     @ConfigurationProperty(order = 10,
             displayMessageKey = "serviceAddress.display",
@@ -29,11 +27,11 @@ public class KohaConfiguration extends AbstractRestConfiguration {
     @ConfigurationProperty(order = 11,
             displayMessageKey = "rest.config.trustAllCertificates.display",
             helpMessageKey = "rest.config.trustAllCertificates.help")
-    public Boolean getTrustAllCertificates() {
+    public boolean isTrustAllCertificates() {
         return trustAllCertificates;
     }
 
-    public void setTrustAllCertificates(Boolean trustAllCertificates) {
+    public void setTrustAllCertificates(boolean trustAllCertificates) {
         this.trustAllCertificates = trustAllCertificates;
     }
 
@@ -53,7 +51,7 @@ public class KohaConfiguration extends AbstractRestConfiguration {
 
     // === 3. Autenticación BASIC ===
     private String username;
-    private GuardedString password;
+    private String password;
 
     @ConfigurationProperty(order = 20,
             displayMessageKey = "username.display",
@@ -69,17 +67,17 @@ public class KohaConfiguration extends AbstractRestConfiguration {
     @ConfigurationProperty(order = 21, confidential = true,
             displayMessageKey = "password.display",
             helpMessageKey = "password.help")
-    public GuardedString getPassword() {
+    public String getPassword() {
         return password;
     }
 
-    public void setPassword(GuardedString password) {
+    public void setPassword(String password) {
         this.password = password;
     }
 
     // === 4. Autenticación OAuth2 (Client Credentials) ===
     private String clientId;
-    private GuardedString clientSecret;
+    private String clientSecret;
 
     @ConfigurationProperty(order = 30,
             displayMessageKey = "koha.config.clientId.display",
@@ -95,16 +93,15 @@ public class KohaConfiguration extends AbstractRestConfiguration {
     @ConfigurationProperty(order = 31, confidential = true,
             displayMessageKey = "koha.config.clientSecret.display",
             helpMessageKey = "koha.config.clientSecret.help")
-    public GuardedString getClientSecret() {
+    public String getClientSecret() {
         return clientSecret;
     }
 
-    public void setClientSecret(GuardedString clientSecret) {
+    public void setClientSecret(String clientSecret) {
         this.clientSecret = clientSecret;
     }
 
     // === 5. Validación de la configuración ===
-    @Override
     public void validate() {
         if (serviceAddress == null || serviceAddress.trim().isEmpty()) {
             throw new IllegalArgumentException("La dirección del servicio (serviceAddress) no puede estar vacía.");
@@ -113,5 +110,20 @@ public class KohaConfiguration extends AbstractRestConfiguration {
             throw new IllegalArgumentException("La estrategia de autenticación (authenticationMethodStrategy) es obligatoria.");
         }
         // Puedes agregar más validaciones si lo necesitas
+    }
+
+    /**
+     * Devuelve sólo los nombres de las propiedades locales, útil para la UI de MidPoint.
+     */
+    public static List<String> getLocalConfigurationProperties() {
+        return Arrays.asList(
+            "serviceAddress",
+            "trustAllCertificates",
+            "authenticationMethodStrategy",
+            "username",
+            "password",
+            "clientId",
+            "clientSecret"
+        );
     }
 }
