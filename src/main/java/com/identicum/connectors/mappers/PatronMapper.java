@@ -64,6 +64,14 @@ public class PatronMapper extends BaseMapper {
         final String ATTR_PROTECTED = "protected";
         final String ATTR_UPDATED_ON = "updated_on";
         final String ATTR_LAST_SEEN = "last_seen";
+        // Nuevas constantes de atributos
+        final String ATTR_SECONDARY_EMAIL = "secondary_email";
+        final String ATTR_STATISTICS_1 = "statistics_1";
+        final String ATTR_STATISTICS_2 = "statistics_2";
+        final String ATTR_LOGIN_ATTEMPTS = "login_attempts";
+        final String ATTR_PRIVACY = "privacy";
+        final String ATTR_LANG = "lang";
+        final String ATTR_EXTENDED_ATTRIBUTES = "extended_attributes";
 
         ATTRIBUTE_METADATA_MAP.put(ATTR_USERID, new AttributeMetadata(ATTR_USERID, "userid", String.class, AttributeMetadata.Flags.REQUIRED));
         ATTRIBUTE_METADATA_MAP.put(ATTR_CARDNUMBER, new AttributeMetadata(ATTR_CARDNUMBER, "cardnumber", String.class, AttributeMetadata.Flags.REQUIRED));
@@ -96,6 +104,16 @@ public class PatronMapper extends BaseMapper {
         ATTRIBUTE_METADATA_MAP.put(ATTR_PROTECTED, new AttributeMetadata(ATTR_PROTECTED, "protected", Boolean.class));
         ATTRIBUTE_METADATA_MAP.put(ATTR_UPDATED_ON, new AttributeMetadata(ATTR_UPDATED_ON, "updated_on", String.class, AttributeMetadata.Flags.NOT_CREATABLE, AttributeMetadata.Flags.NOT_UPDATEABLE));
         ATTRIBUTE_METADATA_MAP.put(ATTR_LAST_SEEN, new AttributeMetadata(ATTR_LAST_SEEN, "last_seen", String.class, AttributeMetadata.Flags.NOT_CREATABLE, AttributeMetadata.Flags.NOT_UPDATEABLE));
+        // Registro en el mapa de metadatos
+        ATTRIBUTE_METADATA_MAP.put(ATTR_SECONDARY_EMAIL, new AttributeMetadata(ATTR_SECONDARY_EMAIL, "secondary_email", String.class));
+        ATTRIBUTE_METADATA_MAP.put(ATTR_STATISTICS_1, new AttributeMetadata(ATTR_STATISTICS_1, "statistics_1", String.class));
+        ATTRIBUTE_METADATA_MAP.put(ATTR_STATISTICS_2, new AttributeMetadata(ATTR_STATISTICS_2, "statistics_2", String.class));
+        ATTRIBUTE_METADATA_MAP.put(ATTR_LOGIN_ATTEMPTS, new AttributeMetadata(ATTR_LOGIN_ATTEMPTS, "login_attempts", Integer.class));
+        ATTRIBUTE_METADATA_MAP.put(ATTR_PRIVACY, new AttributeMetadata(ATTR_PRIVACY, "privacy", Integer.class));
+        ATTRIBUTE_METADATA_MAP.put(ATTR_LANG, new AttributeMetadata(ATTR_LANG, "lang", String.class));
+
+        // Nota: extended_attributes requiere un manejo especial por ser una lista de objetos en Koha
+        ATTRIBUTE_METADATA_MAP.put(ATTR_EXTENDED_ATTRIBUTES, new AttributeMetadata(ATTR_EXTENDED_ATTRIBUTES, "extended_attributes", String.class, AttributeMetadata.Flags.MULTIVALUED));
     }
 
     /**
