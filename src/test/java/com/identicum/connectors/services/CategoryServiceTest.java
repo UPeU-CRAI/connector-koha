@@ -11,6 +11,11 @@ import com.identicum.connectors.KohaConfiguration;
 import com.identicum.connectors.services.HttpClientAdapter;
 import org.apache.http.StatusLine;
 import org.apache.http.HttpEntity;
+import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
+import org.identityconnectors.framework.common.exceptions.ConnectionFailedException;
+import org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException;
+import org.identityconnectors.framework.common.exceptions.PermissionDeniedException;
+import org.identityconnectors.framework.common.exceptions.UnknownUidException;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.identityconnectors.framework.common.objects.OperationOptionsBuilder;
@@ -52,21 +57,21 @@ public class CategoryServiceTest {
 
     @Test
     void testGetCategorySuccess() throws Exception {
-        CloseableHttpResponse resp = prepareResponse(200, "{\"category_id\":\"C1\"}");
+        CloseableHttpResponse resp = prepareResponse(200, "{\"patron_category_id\":\"C1\"}");
         when(httpClient.execute(any(HttpGet.class))).thenReturn(resp);
 
         JSONObject obj = categoryService.getCategory("C1");
-        assertEquals("C1", obj.getString("category_id"));
+        assertEquals("C1", obj.getString("patron_category_id"));
     }
 
     @Test
     void testCreateCategorySuccess() throws Exception {
-        CloseableHttpResponse resp = prepareResponse(200, "{\"category_id\":\"C2\"}");
+        CloseableHttpResponse resp = prepareResponse(200, "{\"patron_category_id\":\"C2\"}");
         when(httpClient.execute(any(HttpPost.class))).thenReturn(resp);
 
         JSONObject payload = new JSONObject().put("description", "Adults");
         JSONObject created = categoryService.createCategory(payload);
-        assertEquals("C2", created.getString("category_id"));
+        assertEquals("C2", created.getString("patron_category_id"));
     }
 
     @Test
@@ -89,14 +94,100 @@ public class CategoryServiceTest {
     @Test
     void testSearchCategoriesPagination() throws Exception {
         JSONArray page1 = new JSONArray()
-                .put(new JSONObject().put("category_id", "C1"))
-                .put(new JSONObject().put("category_id", "C2"));
-        JSONArray page2 = new JSONArray().put(new JSONObject().put("category_id", "C3"));
+                .put(new JSONObject().put("patron_category_id", "C1"))
+                .put(new JSONObject().put("patron_category_id", "C2"));
+        JSONArray page2 = new JSONArray().put(new JSONObject().put("patron_category_id", "C3"));
         CloseableHttpResponse resp1 = prepareResponse(200, page1.toString());
         CloseableHttpResponse resp2 = prepareResponse(200, page2.toString());
         when(httpClient.execute(any(HttpGet.class))).thenReturn(resp1, resp2);
 
         JSONArray result = categoryService.searchCategories(null, new OperationOptionsBuilder().setPageSize(2).build());
         assertEquals(3, result.length());
+    }
+
+    // --- Casos de error HTTP para getCategory ---
+
+    @Test
+    void testGetCategory_400_throwsInvalidAttributeValueException() throws Exception {
+        CloseableHttpResponse resp = prepareResponse(400, "{\"error\":\"Bad Request\"}");
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(resp);
+        assertThrows(InvalidAttributeValueException.class, () -> categoryService.getCategory("C1"));
+    }
+
+    @Test
+    void testGetCategory_401_throwsPermissionDeniedException() throws Exception {
+        CloseableHttpResponse resp = prepareResponse(401, "{\"error\":\"Unauthorized\"}");
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(resp);
+        assertThrows(PermissionDeniedException.class, () -> categoryService.getCategory("C1"));
+    }
+
+    @Test
+    void testGetCategory_403_throwsPermissionDeniedException() throws Exception {
+        CloseableHttpResponse resp = prepareResponse(403, "{\"error\":\"Forbidden\"}");
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(resp);
+        assertThrows(PermissionDeniedException.class, () -> categoryService.getCategory("C1"));
+    }
+
+    @Test
+    void testGetCategory_404_throwsUnknownUidException() throws Exception {
+        CloseableHttpResponse resp = prepareResponse(404, "{\"error\":\"Not Found\"}");
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(resp);
+        assertThrows(UnknownUidException.class, () -> categoryService.getCategory("C1"));
+    }
+
+    @Test
+    void testGetCategory_409_throwsAlreadyExistsException() throws Exception {
+        CloseableHttpResponse resp = prepareResponse(409, "{\"error\":\"Conflict\"}");
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(resp);
+        assertThrows(AlreadyExistsException.class, () -> categoryService.getCategory("C1"));
+    }
+
+    @Test
+    void testGetCategory_500_throwsConnectionFailedException() throws Exception {
+        CloseableHttpResponse resp = prepareResponse(500, "{\"error\":\"Internal Server Error\"}");
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(resp);
+        assertThrows(ConnectionFailedException.class, () -> categoryService.getCategory("C1"));
+    }
+
+    // --- Casos de error HTTP para createCategory ---
+
+    @Test
+    void testCreateCategory_400_throwsInvalidAttributeValueException() throws Exception {
+        CloseableHttpResponse resp = prepareResponse(400, "{\"error\":\"Bad Request\"}");
+        when(httpClient.execute(any(HttpPost.class))).thenReturn(resp);
+        JSONObject payload = new JSONObject().put("description", "Adults");
+        assertThrows(InvalidAttributeValueException.class, () -> categoryService.createCategory(payload));
+    }
+
+    @Test
+    void testCreateCategory_401_throwsPermissionDeniedException() throws Exception {
+        CloseableHttpResponse resp = prepareResponse(401, "{\"error\":\"Unauthorized\"}");
+        when(httpClient.execute(any(HttpPost.class))).thenReturn(resp);
+        JSONObject payload = new JSONObject().put("description", "Adults");
+        assertThrows(PermissionDeniedException.class, () -> categoryService.createCategory(payload));
+    }
+
+    @Test
+    void testCreateCategory_403_throwsPermissionDeniedException() throws Exception {
+        CloseableHttpResponse resp = prepareResponse(403, "{\"error\":\"Forbidden\"}");
+        when(httpClient.execute(any(HttpPost.class))).thenReturn(resp);
+        JSONObject payload = new JSONObject().put("description", "Adults");
+        assertThrows(PermissionDeniedException.class, () -> categoryService.createCategory(payload));
+    }
+
+    @Test
+    void testCreateCategory_409_throwsAlreadyExistsException() throws Exception {
+        CloseableHttpResponse resp = prepareResponse(409, "{\"error\":\"Conflict\"}");
+        when(httpClient.execute(any(HttpPost.class))).thenReturn(resp);
+        JSONObject payload = new JSONObject().put("description", "ExistingCategory");
+        assertThrows(AlreadyExistsException.class, () -> categoryService.createCategory(payload));
+    }
+
+    @Test
+    void testCreateCategory_500_throwsConnectionFailedException() throws Exception {
+        CloseableHttpResponse resp = prepareResponse(500, "{\"error\":\"Internal Server Error\"}");
+        when(httpClient.execute(any(HttpPost.class))).thenReturn(resp);
+        JSONObject payload = new JSONObject().put("description", "Adults");
+        assertThrows(ConnectionFailedException.class, () -> categoryService.createCategory(payload));
     }
 }

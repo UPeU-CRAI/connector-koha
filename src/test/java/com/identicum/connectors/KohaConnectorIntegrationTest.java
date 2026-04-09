@@ -3,7 +3,15 @@ package com.identicum.connectors;
 import com.identicum.connectors.services.CategoryService;
 import com.identicum.connectors.services.PatronService;
 import org.identityconnectors.framework.common.exceptions.ConnectorIOException;
+import org.identityconnectors.framework.common.objects.Attribute;
+import org.identityconnectors.framework.common.objects.AttributeBuilder;
+import org.identityconnectors.framework.common.objects.ObjectClass;
+import org.identityconnectors.framework.common.objects.OperationOptions;
+import org.identityconnectors.framework.common.objects.OperationOptionsBuilder;
+import org.identityconnectors.framework.common.objects.ResultsHandler;
+import org.identityconnectors.framework.common.objects.Uid;
 import org.json.JSONArray;
+import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +20,11 @@ import org.mockito.InjectMocks;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -50,5 +63,111 @@ public class KohaConnectorIntegrationTest {
     void testTestPropagatesException() throws Exception {
         when(patronService.searchPatrons(any(), any())).thenThrow(new ConnectorIOException("fail"));
         assertThrows(ConnectorIOException.class, () -> connector.test());
+    }
+
+    @Test
+    void executeQuery_byUid_returnsPatron() throws Exception {
+        JSONObject patronJson = new JSONObject()
+                .put("patron_id", 42)
+                .put("userid", "jdoe")
+                .put("surname", "Doe")
+                .put("cardnumber", "12345")
+                .put("library_id", "LIB1")
+                .put("category_id", "S");
+        when(patronService.getPatron("42")).thenReturn(patronJson);
+
+        KohaFilter filter = new KohaFilter();
+        filter.setByUid("42");
+
+        List<String> foundUids = new ArrayList<>();
+        ResultsHandler handler = connectorObject -> {
+            foundUids.add(connectorObject.getUid().getUidValue());
+            return true;
+        };
+
+        OperationOptions opts = new OperationOptionsBuilder().build();
+        connector.executeQuery(ObjectClass.ACCOUNT, filter, handler, opts);
+
+        assertEquals(1, foundUids.size());
+        assertEquals("42", foundUids.get(0));
+        verify(patronService, times(1)).getPatron("42");
+    }
+
+    @Test
+    void executeQuery_byCardNumber_returnsPatron() throws Exception {
+        JSONObject patronJson = new JSONObject()
+                .put("patron_id", 7)
+                .put("userid", "msmith")
+                .put("surname", "Smith")
+                .put("cardnumber", "ABC001")
+                .put("library_id", "LIB1")
+                .put("category_id", "S");
+        JSONArray results = new JSONArray().put(patronJson);
+        when(patronService.searchPatrons(any(KohaFilter.class), any())).thenReturn(results);
+
+        KohaFilter filter = new KohaFilter();
+        filter.setByCardNumber("ABC001");
+
+        List<String> foundUids = new ArrayList<>();
+        ResultsHandler handler = connectorObject -> {
+            foundUids.add(connectorObject.getUid().getUidValue());
+            return true;
+        };
+
+        OperationOptions opts = new OperationOptionsBuilder().build();
+        connector.executeQuery(ObjectClass.ACCOUNT, filter, handler, opts);
+
+        assertEquals(1, foundUids.size());
+        assertEquals("7", foundUids.get(0));
+        verify(patronService, times(1)).searchPatrons(any(KohaFilter.class), any());
+    }
+
+    @Test
+    void create_patron_success() throws Exception {
+        JSONObject createdPatron = new JSONObject().put("patron_id", 99);
+        when(patronService.createPatron(any(JSONObject.class))).thenReturn(createdPatron);
+
+        Set<Attribute> attrs = new HashSet<>();
+        attrs.add(AttributeBuilder.build("userid", "newpatron"));
+        attrs.add(AttributeBuilder.build("cardnumber", "CARD001"));
+        attrs.add(AttributeBuilder.build("surname", "Patron"));
+        attrs.add(AttributeBuilder.build("library_id", "LIB1"));
+        attrs.add(AttributeBuilder.build("category_id", "S"));
+
+        Uid uid = connector.create(ObjectClass.ACCOUNT, attrs, new OperationOptionsBuilder().build());
+
+        assertNotNull(uid);
+        assertEquals("99", uid.getUidValue());
+        verify(patronService, times(1)).createPatron(any(JSONObject.class));
+    }
+
+    @Test
+    void update_patron_success() throws Exception {
+        JSONObject existingPatron = new JSONObject()
+                .put("patron_id", 10)
+                .put("userid", "olduser")
+                .put("surname", "Old")
+                .put("cardnumber", "CARD010")
+                .put("library_id", "LIB1")
+                .put("category_id", "S");
+        when(patronService.getPatron("10")).thenReturn(existingPatron);
+        doNothing().when(patronService).updatePatron(eq("10"), any(JSONObject.class));
+
+        Set<Attribute> attrs = new HashSet<>();
+        attrs.add(AttributeBuilder.build("surname", "New"));
+
+        Uid result = connector.update(ObjectClass.ACCOUNT, new Uid("10"), attrs, new OperationOptionsBuilder().build());
+
+        assertNotNull(result);
+        assertEquals("10", result.getUidValue());
+        verify(patronService, times(1)).updatePatron(eq("10"), any(JSONObject.class));
+    }
+
+    @Test
+    void delete_patron_success() throws Exception {
+        doNothing().when(patronService).deletePatron("5");
+
+        assertDoesNotThrow(() -> connector.delete(ObjectClass.ACCOUNT, new Uid("5"), new OperationOptionsBuilder().build()));
+        verify(patronService, times(1)).deletePatron("5");
     }
 }
