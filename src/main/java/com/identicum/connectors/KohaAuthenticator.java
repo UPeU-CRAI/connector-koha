@@ -37,7 +37,7 @@ public class KohaAuthenticator {
     private static final Log LOG = Log.getLog(KohaAuthenticator.class);
     private static final String API_BASE_PATH = "/api/v1";
     private static final int TOKEN_EXPIRY_BUFFER_SECONDS = 60;
-    private static final Object tokenLock = new Object();
+    private final Object tokenLock = new Object();
 
     private final KohaConfiguration configuration;
 
@@ -99,16 +99,10 @@ public class KohaAuthenticator {
         HttpClientBuilder builder = HttpClients.custom()
                 .addInterceptorLast(authInterceptor);
 
-        if (Boolean.TRUE.equals(configuration.getTrustAllCertificates())) {
-            try {
-                TrustStrategy acceptingTrustStrategy = (chain, authType) -> true;
-                builder.setSSLContext(SSLContexts.custom()
-                        .loadTrustMaterial(null, acceptingTrustStrategy)
-                        .build());
-                builder.setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE);
-            } catch (Exception e) {
-                LOG.warn("Error configurando TrustAllCertificates: {0}", e.getMessage());
-            }
+        javax.net.ssl.SSLContext sslContext = buildSslContext();
+        if (sslContext != null) {
+            builder.setSSLContext(sslContext);
+            builder.setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE);
         }
 
         return builder.build();
@@ -133,8 +127,14 @@ public class KohaAuthenticator {
             LOG.ok("OAUTH: Solicitud de nuevo token de acceso...");
             String tokenUrl = configuration.getServiceAddress() + API_BASE_PATH + "/oauth/token";
 
-            // Se necesita un cliente HTTP temporal y simple para esta única petición.
-            try (CloseableHttpClient tokenClient = HttpClients.createDefault()) {
+            // Se necesita un cliente HTTP temporal para esta única petición, respetando SSL config.
+            HttpClientBuilder tokenClientBuilder = HttpClients.custom();
+            javax.net.ssl.SSLContext sslContext = buildSslContext();
+            if (sslContext != null) {
+                tokenClientBuilder.setSSLContext(sslContext);
+                tokenClientBuilder.setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE);
+            }
+            try (CloseableHttpClient tokenClient = tokenClientBuilder.build()) {
                 HttpPost tokenRequest = new HttpPost(tokenUrl);
                 tokenRequest.setHeader("Content-Type", "application/x-www-form-urlencoded");
                 tokenRequest.setHeader("Accept", "application/json");
@@ -174,5 +174,23 @@ public class KohaAuthenticator {
                 }
             }
         }
+    }
+
+    /**
+     * Construye un SSLContext que acepta todos los certificados si trustAllCertificates está habilitado.
+     * Retorna null si trustAllCertificates es false, indicando que se debe usar el contexto SSL por defecto.
+     */
+    private javax.net.ssl.SSLContext buildSslContext() {
+        if (Boolean.TRUE.equals(configuration.getTrustAllCertificates())) {
+            try {
+                TrustStrategy acceptingTrustStrategy = (chain, authType) -> true;
+                return SSLContexts.custom()
+                        .loadTrustMaterial(null, acceptingTrustStrategy)
+                        .build();
+            } catch (Exception e) {
+                LOG.warn("Error configurando TrustAllCertificates: {0}", e.getMessage());
+            }
+        }
+        return null;
     }
 }

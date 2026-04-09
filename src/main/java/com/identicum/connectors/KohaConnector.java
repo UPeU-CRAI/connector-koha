@@ -26,6 +26,7 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 @ConnectorClass(displayNameKey = "connector.identicum.rest.display", configurationClass = KohaConfiguration.class)
@@ -40,7 +41,7 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 	private CategoryService categoryService;
 	private final PatronMapper patronMapper = new PatronMapper();
 	private final CategoryMapper categoryMapper = new CategoryMapper();
-	private Schema connectorSchema = null;
+	private final AtomicReference<Schema> connectorSchema = new AtomicReference<>();
 
 	@Override
 	public KohaConfiguration getConfiguration() {
@@ -83,7 +84,8 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 
 	@Override
 	public Schema schema() {
-		if (this.connectorSchema != null) return this.connectorSchema;
+		Schema cached = this.connectorSchema.get();
+		if (cached != null) return cached;
 		LOG.ok("Construyendo esquema para el Conector Koha...");
 		SchemaBuilder schemaBuilder = new SchemaBuilder(KohaConnector.class);
 
@@ -101,9 +103,10 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 				"name"); // "name" is the ConnId Name for Categories
 		schemaBuilder.defineObjectClass(groupInfo);
 
-		this.connectorSchema = schemaBuilder.build();
+		Schema built = schemaBuilder.build();
+		this.connectorSchema.compareAndSet(null, built);
 		LOG.ok("Esquema construido con éxito.");
-		return this.connectorSchema;
+		return this.connectorSchema.get();
 	}
 
 	@Override
