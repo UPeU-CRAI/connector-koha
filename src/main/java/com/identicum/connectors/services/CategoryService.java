@@ -1,5 +1,6 @@
 package com.identicum.connectors.services;
 
+import com.identicum.connectors.KohaConfiguration;
 import com.identicum.connectors.KohaFilter;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
@@ -26,10 +27,12 @@ import java.util.List;
 public class CategoryService extends AbstractKohaService {
 
     private static final Log LOG = Log.getLog(CategoryService.class);
+    private final KohaConfiguration configuration;
     // API_BASE_PATH and ENDPOINT are handled by AbstractKohaService now
 
-    public CategoryService(HttpClientAdapter httpClient, String serviceAddress) {
+    public CategoryService(HttpClientAdapter httpClient, String serviceAddress, KohaConfiguration configuration) {
         super(httpClient, serviceAddress);
+        this.configuration = configuration;
     }
 
     @Override
@@ -75,7 +78,7 @@ public class CategoryService extends AbstractKohaService {
 
     public JSONArray searchCategories(KohaFilter filter, OperationOptions opts) throws ConnectorException, IOException {
         JSONArray allResults = new JSONArray();
-        int pageSize = (opts != null && opts.getPageSize() != null) ? opts.getPageSize() : 100;
+        int pageSize = (opts != null && opts.getPageSize() != null) ? opts.getPageSize() : configuration.getPageSize();
         int currentPage = 1;
         boolean moreResults;
         String fullUrl = ""; // For logging

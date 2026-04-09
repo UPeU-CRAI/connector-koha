@@ -18,6 +18,7 @@ public class KohaConfiguration implements Configuration {
     private GuardedString password;
     private String clientId;
     private GuardedString clientSecret;
+    private int pageSize = 100;
 
     // Campo para almacenar los mensajes del conector inyectados por el framework
     private ConnectorMessages connectorMessages;
@@ -105,6 +106,17 @@ public class KohaConfiguration implements Configuration {
         this.clientSecret = clientSecret;
     }
 
+    @ConfigurationProperty(order = 40,
+            displayMessageKey = "koha.config.pageSize.display",
+            helpMessageKey = "koha.config.pageSize.help")
+    public int getPageSize() {
+        return pageSize;
+    }
+
+    public void setPageSize(int pageSize) {
+        this.pageSize = pageSize;
+    }
+
     /**
      * Valida que la configuración proporcionada sea coherente y completa.
      */
@@ -124,6 +136,8 @@ public class KohaConfiguration implements Configuration {
             if (clientId == null || clientId.trim().isEmpty()) {
                 throw new IllegalArgumentException("El Client ID es requerido para la autenticación OAUTH2.");
             }
+        } else {
+            throw new IllegalArgumentException("El valor de authenticationMethodStrategy no es reconocido: '" + authenticationMethodStrategy + "'. Valores válidos: BASIC, OAUTH2.");
         }
     }
 

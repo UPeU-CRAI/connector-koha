@@ -3,6 +3,7 @@ package com.identicum.connectors;
 import org.apache.http.HttpException;
 import org.apache.http.HttpRequestInterceptor;
 import org.apache.http.NameValuePair;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
@@ -96,7 +97,14 @@ public class KohaAuthenticator {
             };
         }
 
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectTimeout(10_000)
+                .setSocketTimeout(30_000)
+                .setConnectionRequestTimeout(10_000)
+                .build();
+
         HttpClientBuilder builder = HttpClients.custom()
+                .setDefaultRequestConfig(requestConfig)
                 .addInterceptorLast(authInterceptor);
 
         javax.net.ssl.SSLContext sslContext = buildSslContext();

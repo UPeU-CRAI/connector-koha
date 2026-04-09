@@ -7,6 +7,7 @@ import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
+import com.identicum.connectors.KohaConfiguration;
 import com.identicum.connectors.services.HttpClientAdapter;
 import org.apache.http.StatusLine;
 import org.apache.http.HttpEntity;
@@ -35,7 +36,8 @@ public class CategoryServiceTest {
 
     @BeforeEach
     void setUp() {
-        categoryService = new CategoryService(httpClient, "http://localhost");
+        KohaConfiguration configuration = new KohaConfiguration();
+        categoryService = new CategoryService(httpClient, "http://localhost", configuration);
     }
 
     private CloseableHttpResponse prepareResponse(int status, String body) throws IOException {

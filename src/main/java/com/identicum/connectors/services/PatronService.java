@@ -1,5 +1,6 @@
 package com.identicum.connectors.services;
 
+import com.identicum.connectors.KohaConfiguration;
 import com.identicum.connectors.KohaFilter;
 import com.identicum.connectors.services.HttpClientAdapter;
 import org.apache.http.client.methods.HttpDelete;
@@ -24,9 +25,11 @@ import java.util.List;
 public class PatronService extends AbstractKohaService {
 
     private static final Log LOG = Log.getLog(PatronService.class);
+    private final KohaConfiguration configuration;
 
-    public PatronService(HttpClientAdapter httpClient, String serviceAddress) {
+    public PatronService(HttpClientAdapter httpClient, String serviceAddress, KohaConfiguration configuration) {
         super(httpClient, serviceAddress);
+        this.configuration = configuration;
     }
 
     @Override
@@ -69,7 +72,7 @@ public class PatronService extends AbstractKohaService {
 
     public JSONArray searchPatrons(KohaFilter filter, OperationOptions opts) throws ConnectorException, IOException {
         JSONArray allResults = new JSONArray();
-        int pageSize = (opts != null && opts.getPageSize() != null) ? opts.getPageSize() : 100;
+        int pageSize = (opts != null && opts.getPageSize() != null) ? opts.getPageSize() : configuration.getPageSize();
         int currentPage = 1;
         boolean moreResults;
         String fullUrl;

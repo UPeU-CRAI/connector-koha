@@ -60,8 +60,8 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 
 		try {
 			String serviceAddress = getConfiguration().getServiceAddress();
-			this.patronService = new PatronService(this.httpAdapter, serviceAddress);
-			this.categoryService = new CategoryService(this.httpAdapter, serviceAddress);
+			this.patronService = new PatronService(this.httpAdapter, serviceAddress, this.configuration);
+			this.categoryService = new CategoryService(this.httpAdapter, serviceAddress, this.configuration);
 			LOG.ok("Conector Koha inicializado con éxito.");
 		} catch (Exception e) {
 			LOG.error(e, "Error durante la inicialización de los servicios del conector.");
