@@ -80,6 +80,8 @@ public class CategoryService extends AbstractKohaService {
         JSONArray allResults = new JSONArray();
         int pageSize = (opts != null && opts.getPageSize() != null) ? opts.getPageSize() : configuration.getPageSize();
         int currentPage = 1;
+        int pageCount = 0;
+        final int MAX_PAGES = 1000;
         boolean moreResults;
         String fullUrl = ""; // For logging
 
@@ -136,6 +138,11 @@ public class CategoryService extends AbstractKohaService {
             }
 
             moreResults = pageResults.length() == pageSize;
+            pageCount++;
+            if (pageCount >= MAX_PAGES) {
+                LOG.warn("Max pages limit ({0}) reached, stopping pagination. Results may be incomplete.", MAX_PAGES);
+                break;
+            }
             if (moreResults) {
                 currentPage++;
             }

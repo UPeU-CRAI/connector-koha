@@ -12,7 +12,11 @@ import org.identityconnectors.framework.spi.ConfigurationProperty;
 public class KohaConfiguration implements Configuration {
 
     private String serviceAddress;
-    private boolean trustAllCertificates;
+    /**
+     * If true, all SSL certificates are trusted (including self-signed).
+     * Default is false. Only enable in development/testing environments.
+     */
+    private boolean trustAllCertificates = false;
     private String authenticationMethodStrategy;
     private String username;
     private GuardedString password;
