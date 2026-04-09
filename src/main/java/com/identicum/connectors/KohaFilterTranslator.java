@@ -50,9 +50,7 @@ public class KohaFilterTranslator extends AbstractFilterTranslator<KohaFilter> {
             handled = true;
 
         } else if ("cardnumber".equals(attrName)) { // Filtro por cardnumber
-            // Nota: Para que este filtro funcione, necesitas añadir el campo y sus getters/setters
-            // en KohaFilter.java y usarlo en executeQuery en KohaConnector.java
-            translatedFilter.setByCardNumber(singleValue); // Asumiendo que añades este método
+            translatedFilter.setByCardNumber(singleValue);
             LOG.ok("Translated EqualsFilter on 'cardnumber' to KohaFilter.byCardNumber: {0}", singleValue);
             handled = true;
         }

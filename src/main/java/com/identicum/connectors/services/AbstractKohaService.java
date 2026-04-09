@@ -6,6 +6,7 @@ import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
 import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.conn.ConnectTimeoutException;
 import org.apache.http.conn.HttpHostConnectException;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.util.EntityUtils;
@@ -29,6 +30,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.SocketTimeoutException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.Callable;
 import java.util.zip.GZIPInputStream;
 
 public abstract class AbstractKohaService {
@@ -61,7 +63,7 @@ public abstract class AbstractKohaService {
             LOG.ok("Trace Mapper: Request payload for {0} {1}: {2}", request.getMethod(), request.getURI(), payload.toString(2));
         }
 
-        try (CloseableHttpResponse response = httpClient.execute(request)) {
+        try (CloseableHttpResponse response = executeWithRetry(() -> httpClient.execute(request))) {
             processResponseErrors(response, request);
             String result = EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
             // If status code is 204 (No Content) or the result is blank, return an empty JSON object.
@@ -97,7 +99,7 @@ public abstract class AbstractKohaService {
 
         LOG.ok("Trace Mapper: Executing {0} request to {1}", request.getMethod(), request.getURI());
 
-        try (CloseableHttpResponse response = httpClient.execute(request)) {
+        try (CloseableHttpResponse response = executeWithRetry(() -> httpClient.execute(request))) {
             processResponseErrors(response, request);
             HttpEntity entity = response.getEntity();
             if (entity == null) {
@@ -137,6 +139,64 @@ public abstract class AbstractKohaService {
         } catch (IOException e) {
             LOG.error(e, "IO error during {0} {1}.", request.getMethod(), request.getURI());
             throw new ConnectorIOException("IO error during request to '" + request.getURI() + "'. Details: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Ejecuta la accion HTTP con hasta 3 intentos y backoff exponencial (1s, 2s).
+     * Reintenta en: SocketTimeoutException, ConnectTimeoutException, HttpHostConnectException,
+     * y respuestas HTTP con status 502, 503 o 504.
+     * En el ultimo intento fallido relanza la excepcion original.
+     */
+    private CloseableHttpResponse executeWithRetry(Callable<CloseableHttpResponse> action) throws IOException {
+        final int maxAttempts = 3;
+        IOException lastException = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                CloseableHttpResponse response = action.call();
+                int status = response.getStatusLine().getStatusCode();
+                if (status == 502 || status == 503 || status == 504) {
+                    response.close();
+                    if (attempt < maxAttempts) {
+                        LOG.warn("Koha returned HTTP {0} (transient error). Reintento {1} de {2}.", status, attempt + 1, maxAttempts);
+                        sleepBackoff(attempt);
+                        continue;
+                    } else {
+                        // Ultimo intento: devolver la respuesta para que processResponseErrors la maneje
+                        // Necesitamos re-ejecutar para obtener una respuesta fresca
+                        return action.call();
+                    }
+                }
+                return response;
+            } catch (SocketTimeoutException | ConnectTimeoutException | HttpHostConnectException e) {
+                lastException = e;
+                if (attempt < maxAttempts) {
+                    LOG.warn("Error transitorio de red ({0}). Reintento {1} de {2}.", e.getClass().getSimpleName(), attempt + 1, maxAttempts);
+                    sleepBackoff(attempt);
+                } else {
+                    LOG.error(e, "Error transitorio de red persistente tras {0} intentos.", maxAttempts);
+                    throw e;
+                }
+            } catch (Exception e) {
+                // Excepcion no retriable: propagar inmediatamente
+                if (e instanceof IOException) {
+                    throw (IOException) e;
+                }
+                throw new IOException("Error inesperado ejecutando peticion HTTP: " + e.getMessage(), e);
+            }
+        }
+
+        // No deberia llegar aqui, pero por seguridad
+        throw lastException != null ? lastException : new IOException("Fallo inesperado en executeWithRetry.");
+    }
+
+    private void sleepBackoff(int attempt) {
+        long waitMs = (long) Math.pow(2, attempt - 1) * 1000L; // 1s, 2s
+        try {
+            Thread.sleep(waitMs);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
         }
     }
 
