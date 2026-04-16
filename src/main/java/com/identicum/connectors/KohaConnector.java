@@ -14,6 +14,7 @@ import org.identityconnectors.framework.common.exceptions.ConfigurationException
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.exceptions.ConnectorIOException;
 import org.identityconnectors.framework.common.objects.*;
+import org.identityconnectors.framework.common.objects.OperationalAttributeInfos;
 import org.identityconnectors.framework.common.objects.filter.FilterTranslator;
 import org.identityconnectors.framework.spi.Configuration;
 import org.identityconnectors.framework.spi.Connector;
@@ -116,12 +117,16 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 		try {
 			if (ObjectClass.ACCOUNT.is(oClass.getObjectClassValue())) {
 				JSONObject payload = patronMapper.buildPatronJson(attrs, true);
+				// Apply __ENABLE__ if present
+				Attribute enableAttr = AttributeUtil.find(OperationalAttributes.ENABLE_NAME, attrs);
+				if (enableAttr != null) {
+					Boolean enabled = AttributeUtil.getBooleanValue(enableAttr);
+					patronMapper.applyEnableAttribute(payload, enabled);
+				}
 				JSONObject response = patronService.createPatron(payload);
 				newUidValue = String.valueOf(response.get(PatronMapper.KOHA_PATRON_ID_NATIVE_NAME));
 			} else if (ObjectClass.GROUP.is(oClass.getObjectClassValue())) {
-				JSONObject payload = categoryMapper.buildCategoryJson(attrs, true);
-				JSONObject response = categoryService.createCategory(payload);
-				newUidValue = String.valueOf(response.get(CategoryMapper.KOHA_CATEGORY_ID_NATIVE_NAME));
+				throw new UnsupportedOperationException("Patron categories are read-only in Koha API");
 			} else {
 				throw new UnsupportedOperationException("Operación Create no soportada para: " + oClass.getObjectClassValue());
 			}
@@ -148,25 +153,15 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 		}
 		try {
 			if (ObjectClass.ACCOUNT.is(oClass.getObjectClassValue())) {
-				// Consider fetching only if necessary or let service handle optimistic locking if supported
-				// For now, matching existing logic structure:
-				JSONObject existingPatron = patronService.getPatron(uid.getUidValue()); // This could throw if not found
 				JSONObject changes = patronMapper.buildPatronJson(attrs, false);
-				for (String key : changes.keySet()) {
-					existingPatron.put(key, changes.get(key));
+				Attribute enableAttr = AttributeUtil.find(OperationalAttributes.ENABLE_NAME, attrs);
+				if (enableAttr != null) {
+					Boolean enabled = AttributeUtil.getBooleanValue(enableAttr);
+					patronMapper.applyEnableAttribute(changes, enabled);
 				}
-				// Prune attributes that are not updateable according to metadata
-				// This logic might be better suited within the mapper or service
-				for (AttributeMetadata meta : PatronMapper.ATTRIBUTE_METADATA_MAP.values()) {
-					if (meta.isNotUpdateable()) { // Only check NotUpdateable for update
-						existingPatron.remove(meta.getKohaNativeName());
-					}
-				}
-				patronService.updatePatron(uid.getUidValue(), existingPatron);
+				patronService.updatePatron(uid.getUidValue(), changes);
 			} else if (ObjectClass.GROUP.is(oClass.getObjectClassValue())) {
-				JSONObject payload = categoryMapper.buildCategoryJson(attrs, false);
-				// Similar pruning could be applied for groups if necessary
-				categoryService.updateCategory(uid.getUidValue(), payload);
+				throw new UnsupportedOperationException("Patron categories are read-only in Koha API");
 			} else {
 				throw new UnsupportedOperationException("Operación Update no soportada para: " + oClass.getObjectClassValue());
 			}
@@ -191,7 +186,7 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 			if (ObjectClass.ACCOUNT.is(oClass.getObjectClassValue())) {
 				patronService.deletePatron(uid.getUidValue());
 			} else if (ObjectClass.GROUP.is(oClass.getObjectClassValue())) {
-				categoryService.deleteCategory(uid.getUidValue());
+				throw new UnsupportedOperationException("Patron categories are read-only in Koha API");
 			} else {
 				throw new UnsupportedOperationException("Operación Delete no soportada para: " + oClass.getObjectClassValue());
 			}
@@ -344,6 +339,10 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 			if (!connIdNameAttribute.equals(meta.getConnIdName())) { // Exclude the one already added as Name.NAME
 				ociBuilder.addAttributeInfo(createAttributeInfo(meta)); // Uses existing helper
 			}
+		}
+		// Add __ENABLE__ operational attribute for ACCOUNT type
+		if (ObjectClass.ACCOUNT_NAME.equals(objectClassType)) {
+			ociBuilder.addAttributeInfo(OperationalAttributeInfos.ENABLE);
 		}
 		return ociBuilder.build();
 	}

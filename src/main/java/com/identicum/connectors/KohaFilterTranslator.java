@@ -6,7 +6,9 @@ import org.identityconnectors.framework.common.objects.AttributeUtil;
 import org.identityconnectors.framework.common.objects.Name;
 import org.identityconnectors.framework.common.objects.Uid;
 import org.identityconnectors.framework.common.objects.filter.AbstractFilterTranslator;
+import org.identityconnectors.framework.common.objects.filter.ContainsFilter;
 import org.identityconnectors.framework.common.objects.filter.EqualsFilter;
+import org.identityconnectors.framework.common.objects.filter.StartsWithFilter;
 
 public class KohaFilterTranslator extends AbstractFilterTranslator<KohaFilter> {
 
@@ -53,6 +55,14 @@ public class KohaFilterTranslator extends AbstractFilterTranslator<KohaFilter> {
             translatedFilter.setByCardNumber(singleValue);
             LOG.ok("Translated EqualsFilter on 'cardnumber' to KohaFilter.byCardNumber: {0}", singleValue);
             handled = true;
+        } else if ("category_id".equals(attrName)) {
+            translatedFilter.setByCategoryId(singleValue);
+            LOG.ok("Translated EqualsFilter on 'category_id' to KohaFilter.byCategoryId: {0}", singleValue);
+            handled = true;
+        } else if ("library_id".equals(attrName)) {
+            translatedFilter.setByLibraryId(singleValue);
+            LOG.ok("Translated EqualsFilter on 'library_id' to KohaFilter.byLibraryId: {0}", singleValue);
+            handled = true;
         }
 
         if (handled) {
@@ -61,5 +71,65 @@ public class KohaFilterTranslator extends AbstractFilterTranslator<KohaFilter> {
 
         LOG.ok("Unsupported attribute for EqualsFilter: {0}", attrName);
         return null;
+    }
+
+    @Override
+    protected KohaFilter createContainsExpression(ContainsFilter filter, boolean not) {
+        LOG.ok("createContainsExpression, filter: {0}, not: {1}", filter, not);
+        if (not) return null;
+
+        Attribute attr = filter.getAttribute();
+        String attrName = attr.getName();
+        String singleValue = AttributeUtil.getAsStringValue(attr);
+        if (singleValue == null) return null;
+
+        KohaFilter translatedFilter = new KohaFilter();
+        translatedFilter.setMatchType("contains");
+
+        if (Name.NAME.equals(attrName)) {
+            translatedFilter.setByName(singleValue);
+        } else if ("email".equals(attrName)) {
+            translatedFilter.setByEmail(singleValue);
+        } else if ("cardnumber".equals(attrName)) {
+            translatedFilter.setByCardNumber(singleValue);
+        } else if ("category_id".equals(attrName)) {
+            translatedFilter.setByCategoryId(singleValue);
+        } else if ("library_id".equals(attrName)) {
+            translatedFilter.setByLibraryId(singleValue);
+        } else {
+            LOG.ok("Unsupported attribute for ContainsFilter: {0}", attrName);
+            return null;
+        }
+        return translatedFilter;
+    }
+
+    @Override
+    protected KohaFilter createStartsWithExpression(StartsWithFilter filter, boolean not) {
+        LOG.ok("createStartsWithExpression, filter: {0}, not: {1}", filter, not);
+        if (not) return null;
+
+        Attribute attr = filter.getAttribute();
+        String attrName = attr.getName();
+        String singleValue = AttributeUtil.getAsStringValue(attr);
+        if (singleValue == null) return null;
+
+        KohaFilter translatedFilter = new KohaFilter();
+        translatedFilter.setMatchType("starts_with");
+
+        if (Name.NAME.equals(attrName)) {
+            translatedFilter.setByName(singleValue);
+        } else if ("email".equals(attrName)) {
+            translatedFilter.setByEmail(singleValue);
+        } else if ("cardnumber".equals(attrName)) {
+            translatedFilter.setByCardNumber(singleValue);
+        } else if ("category_id".equals(attrName)) {
+            translatedFilter.setByCategoryId(singleValue);
+        } else if ("library_id".equals(attrName)) {
+            translatedFilter.setByLibraryId(singleValue);
+        } else {
+            LOG.ok("Unsupported attribute for StartsWithFilter: {0}", attrName);
+            return null;
+        }
+        return translatedFilter;
     }
 }

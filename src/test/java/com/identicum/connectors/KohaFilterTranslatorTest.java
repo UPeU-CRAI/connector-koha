@@ -3,11 +3,11 @@ package com.identicum.connectors;
 import org.identityconnectors.framework.common.objects.AttributeBuilder;
 import org.identityconnectors.framework.common.objects.Name;
 import org.identityconnectors.framework.common.objects.Uid;
+import org.identityconnectors.framework.common.objects.filter.ContainsFilter;
 import org.identityconnectors.framework.common.objects.filter.EqualsFilter;
 import org.identityconnectors.framework.common.objects.filter.Filter;
-    import org.identityconnectors.framework.common.objects.filter.FilterBuilder;
-// Importa otros tipos de filtro si los vas a probar, ej. AndFilter, OrFilter
-// import org.identityconnectors.framework.common.objects.filter.GreaterThanFilter;
+import org.identityconnectors.framework.common.objects.filter.FilterBuilder;
+import org.identityconnectors.framework.common.objects.filter.StartsWithFilter;
 import org.junit.jupiter.api.Test;
     import java.util.List;
 
@@ -108,15 +108,57 @@ public class KohaFilterTranslatorTest {
                    "La lista de KohaFilter debería ser null o vacía para un atributo con valor null");
     }
 
-    // Ejemplo de prueba para un tipo de filtro completamente no soportado por AbstractFilterTranslator
-    // Esto es solo para ilustrar, ya que AbstractFilterTranslator solo llama a createEqualsExpression
-    // para EqualsFilter. Otros tipos de filtro resultarán en null por defecto.
-    /*
     @Test
-    void testTranslateCompletelyUnsupportedFilterType() {
-        Filter filter = new GreaterThanFilter(AttributeBuilder.build("some_attr", 10));
-        KohaFilter kohaFilter = translator.translate(filter);
-        assertNull(kohaFilter, "KohaFilter debería ser null para un tipo de filtro no soportado");
+    void testTranslateContainsFilter_Email() {
+        Filter filter = new ContainsFilter(AttributeBuilder.build("email", "example.com"));
+        List<KohaFilter> kohaFilters = translator.translate(filter);
+        assertNotNull(kohaFilters);
+        assertFalse(kohaFilters.isEmpty());
+        KohaFilter kohaFilter = kohaFilters.get(0);
+        assertEquals("example.com", kohaFilter.getByEmail());
+        assertEquals("contains", kohaFilter.getMatchType());
+        assertNull(kohaFilter.getByUid());
+        assertNull(kohaFilter.getByCardNumber());
     }
-    */
+
+    @Test
+    void testTranslateStartsWithFilter_CardNumber() {
+        Filter filter = new StartsWithFilter(AttributeBuilder.build("cardnumber", "ABC"));
+        List<KohaFilter> kohaFilters = translator.translate(filter);
+        assertNotNull(kohaFilters);
+        assertFalse(kohaFilters.isEmpty());
+        KohaFilter kohaFilter = kohaFilters.get(0);
+        assertEquals("ABC", kohaFilter.getByCardNumber());
+        assertEquals("starts_with", kohaFilter.getMatchType());
+        assertNull(kohaFilter.getByUid());
+        assertNull(kohaFilter.getByEmail());
+    }
+
+    @Test
+    void testTranslateEqualsFilter_CategoryId() {
+        Filter filter = new EqualsFilter(AttributeBuilder.build("category_id", "ESTUDI"));
+        List<KohaFilter> kohaFilters = translator.translate(filter);
+        assertNotNull(kohaFilters);
+        assertFalse(kohaFilters.isEmpty());
+        KohaFilter kohaFilter = kohaFilters.get(0);
+        assertEquals("ESTUDI", kohaFilter.getByCategoryId());
+        assertNull(kohaFilter.getByUid());
+        assertNull(kohaFilter.getByName());
+        assertNull(kohaFilter.getByEmail());
+        assertNull(kohaFilter.getByCardNumber());
+    }
+
+    @Test
+    void testTranslateEqualsFilter_LibraryId() {
+        Filter filter = new EqualsFilter(AttributeBuilder.build("library_id", "BUL"));
+        List<KohaFilter> kohaFilters = translator.translate(filter);
+        assertNotNull(kohaFilters);
+        assertFalse(kohaFilters.isEmpty());
+        KohaFilter kohaFilter = kohaFilters.get(0);
+        assertEquals("BUL", kohaFilter.getByLibraryId());
+        assertNull(kohaFilter.getByUid());
+        assertNull(kohaFilter.getByName());
+        assertNull(kohaFilter.getByEmail());
+        assertNull(kohaFilter.getByCardNumber());
+    }
 }

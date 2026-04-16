@@ -1,77 +1,460 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Reemplazar "REEMPLAZAR_CON_OID_UNICO" con el OID generado en su instancia de MidPoint -->
-<resource oid="REEMPLAZAR_CON_OID_UNICO"
+<!--
+    Koha ILS Resource Template for connector-koha v1.2.0
+    =====================================================
+    Generic MidPoint resource definition for provisioning patrons to Koha ILS
+    via the ConnId connector-koha.
+
+    PLACEHOLDERS — replace before importing into MidPoint:
+      REPLACE_WITH_OID          — unique OID for this resource (use `uuidgen`)
+      REPLACE_WITH_KOHA_URL     — base URL of Koha instance (e.g., https://koha.example.edu)
+      REPLACE_WITH_CLIENT_ID    — OAuth2 client_id registered in Koha
+      REPLACE_WITH_CLIENT_SECRET— OAuth2 client_secret
+      REPLACE_WITH_RESOURCE_NAME— display name (e.g., "Koha Library")
+
+    __ENABLE__ dual mechanism:
+      Koha has no native "disabled" flag. The connector simulates activation
+      using two fields together:
+        1. patron_card_lost = 1  — marks the card as lost (blocks circulation)
+        2. expiry_date = past    — prevents login to OPAC
+      When MidPoint sets administrativeStatus=DISABLED, the connector applies
+      both. When re-enabled, it clears patron_card_lost and restores expiry_date.
+-->
+<resource oid="REPLACE_WITH_OID"
           xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
           xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+          xmlns:icfc="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/connector-schema-3"
           xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3"
           xmlns:ri="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3"
           xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3"
           xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3"
-          xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3"
-          xmlns:cfg="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/connector-koha/com.identicum.connectors.KohaConnector">
+          xmlns:cap="http://midpoint.evolveum.com/xml/ns/public/resource/capabilities-3">
 
-    <name>Koha (UPeU)</name>
+    <name>REPLACE_WITH_RESOURCE_NAME</name>
+    <description>Koha ILS patron provisioning via connector-koha 1.2.0 (OAuth2)</description>
 
+    <!-- ==================== Connector Reference ==================== -->
     <connectorRef type="ConnectorType">
         <filter>
-            <q:equal>
-                <q:path>c:connectorType</q:path>
-                <q:value>com.identicum.connectors.KohaConnector</q:value>
-            </q:equal>
-            <q:equal>
-                <q:path>c:connectorVersion</q:path>
-                <q:value>1.0.1</q:value>
-            </q:equal>
+            <q:and>
+                <q:equal>
+                    <q:path>c:connectorType</q:path>
+                    <q:value>com.identicum.connectors.KohaConnector</q:value>
+                </q:equal>
+                <q:equal>
+                    <q:path>c:connectorVersion</q:path>
+                    <q:value>1.2.0</q:value>
+                </q:equal>
+            </q:and>
         </filter>
     </connectorRef>
 
+    <!-- ==================== Connector Configuration ==================== -->
+    <!--
+        Authentication: OAuth2 is the default and recommended method.
+        The connector obtains a token from Koha's /api/v1/oauth/token endpoint
+        using client_credentials grant type.
+    -->
     <connectorConfiguration>
-        <icfc:configurationProperties>
-            <cfg:serviceAddress>http://koha.upeu.edu.pe</cfg:serviceAddress>
-
+        <icfc:configurationProperties
+                xmlns:cfg="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/connector-koha/com.identicum.connectors.KohaConnector">
+            <cfg:serviceAddress>REPLACE_WITH_KOHA_URL</cfg:serviceAddress>
             <cfg:authenticationMethodStrategy>OAUTH2</cfg:authenticationMethodStrategy>
-            <cfg:clientId>TU_CLIENT_ID</cfg:clientId>
+            <cfg:clientId>REPLACE_WITH_CLIENT_ID</cfg:clientId>
             <cfg:clientSecret>
-                <t:clearValue>TU_CLIENT_SECRET</t:clearValue>
+                <t:clearValue>REPLACE_WITH_CLIENT_SECRET</t:clearValue>
             </cfg:clientSecret>
             <cfg:trustAllCertificates>false</cfg:trustAllCertificates>
         </icfc:configurationProperties>
     </connectorConfiguration>
 
+    <!-- ==================== Schema Handling ==================== -->
     <schemaHandling>
+
+        <!-- ===== ACCOUNT: Koha Patron ===== -->
         <objectType>
             <kind>account</kind>
             <intent>default</intent>
-            <displayName>Patrón de Koha</displayName>
-            <objectClass>icfs:account</objectClass>
+            <displayName>Koha Patron</displayName>
             <default>true</default>
+            <delineation>
+                <objectClass>ri:AccountObjectClass</objectClass>
+            </delineation>
 
+            <!-- userid — Koha login identifier -->
             <attribute>
-                <ref>icfs:name</ref> <displayName>User ID (Login)</displayName>
+                <ref>icfs:name</ref>
+                <displayName>User ID (login)</displayName>
                 <outbound>
-                    <source><path>$user/name</path></source>
+                    <name>userid-outbound</name>
+                    <strength>strong</strength>
+                    <source>
+                        <path>$focus/name</path>
+                    </source>
                 </outbound>
-                <inbound>
-                    <target><path>$user/name</path></target>
-                </inbound>
             </attribute>
+
+            <!-- cardnumber — library card number, used as primary correlation key -->
+            <attribute>
+                <ref>ri:cardnumber</ref>
+                <displayName>Card Number</displayName>
+                <outbound>
+                    <name>cardnumber-outbound</name>
+                    <strength>strong</strength>
+                    <!-- Map from MidPoint username or a dedicated extension attribute.
+                         Adjust the source path to match your identity schema. -->
+                    <source>
+                        <path>$focus/name</path>
+                    </source>
+                </outbound>
+            </attribute>
+
+            <!-- surname -->
             <attribute>
                 <ref>ri:surname</ref>
-                <outbound><source><path>$user/familyName</path></source></outbound>
-                <inbound><target><path>$user/familyName</path></target></inbound>
+                <displayName>Surname</displayName>
+                <outbound>
+                    <name>surname-outbound</name>
+                    <strength>strong</strength>
+                    <source>
+                        <path>$focus/familyName</path>
+                    </source>
+                </outbound>
             </attribute>
+
+            <!-- firstname -->
+            <attribute>
+                <ref>ri:firstname</ref>
+                <displayName>First Name</displayName>
+                <outbound>
+                    <name>firstname-outbound</name>
+                    <strength>strong</strength>
+                    <source>
+                        <path>$focus/givenName</path>
+                    </source>
+                </outbound>
+            </attribute>
+
+            <!-- email -->
+            <attribute>
+                <ref>ri:email</ref>
+                <displayName>Email</displayName>
+                <outbound>
+                    <name>email-outbound</name>
+                    <strength>strong</strength>
+                    <source>
+                        <path>$focus/emailAddress</path>
+                    </source>
+                </outbound>
+            </attribute>
+
+            <!-- phone -->
+            <attribute>
+                <ref>ri:phone</ref>
+                <displayName>Phone</displayName>
+                <outbound>
+                    <name>phone-outbound</name>
+                    <strength>strong</strength>
+                    <source>
+                        <path>$focus/telephoneNumber</path>
+                    </source>
+                </outbound>
+            </attribute>
+
+            <!-- category_id — Koha patron category (e.g., ST=Student, PR=Professor)
+                 Typically set via archetype mapping or object template expression.
+                 Adjust the source to match your identity model. -->
+            <attribute>
+                <ref>ri:category_id</ref>
+                <displayName>Patron Category</displayName>
+                <outbound>
+                    <name>category-id-outbound</name>
+                    <strength>strong</strength>
+                    <expression>
+                        <!-- REPLACE: map from archetype or extension attribute.
+                             Example: return category code based on user archetype. -->
+                        <value>REPLACE_WITH_DEFAULT_CATEGORY</value>
+                    </expression>
+                </outbound>
+            </attribute>
+
+            <!-- library_id — Koha home library branch code
+                 Typically set via campus mapping or organization membership.
+                 Adjust the source to match your identity model. -->
+            <attribute>
+                <ref>ri:library_id</ref>
+                <displayName>Home Library</displayName>
+                <outbound>
+                    <name>library-id-outbound</name>
+                    <strength>strong</strength>
+                    <expression>
+                        <!-- REPLACE: map from campus/locality or extension attribute.
+                             Example: return branch code based on user locality. -->
+                        <value>REPLACE_WITH_DEFAULT_LIBRARY</value>
+                    </expression>
+                </outbound>
+            </attribute>
+
+            <!-- expiry_date — patron account expiration (format: YYYY-MM-DD) -->
+            <attribute>
+                <ref>ri:expiry_date</ref>
+                <displayName>Expiry Date</displayName>
+                <outbound>
+                    <name>expiry-date-outbound</name>
+                    <strength>strong</strength>
+                    <expression>
+                        <!-- REPLACE: compute from enrollment period, contract end date,
+                             or activation/validTo. Example uses validTo: -->
+                        <script>
+                            <code>
+                                // Return expiry date as YYYY-MM-DD string
+                                // Adjust logic to match your lifecycle policy
+                                def validTo = focus?.getActivation()?.getValidTo()
+                                if (validTo != null) {
+                                    return basic.formatDateTime("yyyy-MM-dd", validTo)
+                                }
+                                return null
+                            </code>
+                        </script>
+                    </expression>
+                </outbound>
+            </attribute>
+
+            <!-- date_of_birth — patron birth date (format: YYYY-MM-DD) -->
+            <attribute>
+                <ref>ri:date_of_birth</ref>
+                <displayName>Date of Birth</displayName>
+                <outbound>
+                    <name>dob-outbound</name>
+                    <strength>strong</strength>
+                    <expression>
+                        <!-- REPLACE: map from extension/demographics/birthDate -->
+                        <script>
+                            <code>
+                                // Adjust path to match your schema extension
+                                // Example: focus?.getExtension()?.find('birthDate')
+                                return null
+                            </code>
+                        </script>
+                    </expression>
+                </outbound>
+            </attribute>
+
+            <!-- gender — M/F per Koha convention -->
+            <attribute>
+                <ref>ri:gender</ref>
+                <displayName>Gender</displayName>
+                <outbound>
+                    <name>gender-outbound</name>
+                    <strength>strong</strength>
+                    <expression>
+                        <!-- REPLACE: map from extension/demographics/gender
+                             Koha expects single-char values or descriptive strings
+                             depending on authorized_values configuration. -->
+                        <script>
+                            <code>
+                                // Adjust path and mapping to match your schema
+                                return null
+                            </code>
+                        </script>
+                    </expression>
+                </outbound>
+            </attribute>
+
+            <!-- statistics_1 — free-form field, typically used for faculty/department -->
+            <attribute>
+                <ref>ri:statistics_1</ref>
+                <displayName>Statistics 1 (Faculty)</displayName>
+                <outbound>
+                    <name>statistics1-outbound</name>
+                    <strength>strong</strength>
+                    <expression>
+                        <!-- REPLACE: map from organizationalUnit, extension attribute,
+                             or org membership. Used for library reporting. -->
+                        <script>
+                            <code>return null</code>
+                        </script>
+                    </expression>
+                </outbound>
+            </attribute>
+
+            <!-- statistics_2 — free-form field, typically used for academic program -->
+            <attribute>
+                <ref>ri:statistics_2</ref>
+                <displayName>Statistics 2 (Academic Program)</displayName>
+                <outbound>
+                    <name>statistics2-outbound</name>
+                    <strength>strong</strength>
+                    <expression>
+                        <!-- REPLACE: map from extension/academicStatus/academicProgram
+                             or similar attribute. Used for library reporting. -->
+                        <script>
+                            <code>return null</code>
+                        </script>
+                    </expression>
+                </outbound>
+            </attribute>
+
+            <!-- sms_number — mobile number for SMS notifications -->
+            <attribute>
+                <ref>ri:sms_number</ref>
+                <displayName>SMS Number</displayName>
+                <outbound>
+                    <name>sms-number-outbound</name>
+                    <strength>strong</strength>
+                    <expression>
+                        <!-- REPLACE: map from extension/contactInfo/phoneNumberAlt
+                             or telephoneNumber. -->
+                        <script>
+                            <code>return null</code>
+                        </script>
+                    </expression>
+                </outbound>
+            </attribute>
+
+            <!-- ===== Activation (simulated) =====
+                 Koha has no native enabled/disabled flag. The connector simulates
+                 activation using a dual mechanism:
+                   - patron_card_lost = 1 (blocks circulation operations)
+                   - expiry_date set to past date (blocks OPAC login)
+                 When re-enabled, patron_card_lost is cleared and expiry_date is
+                 restored to the originally computed value. -->
+            <activation>
+                <administrativeStatus>
+                    <outbound>
+                        <name>activation-status-outbound</name>
+                        <strength>strong</strength>
+                    </outbound>
+                </administrativeStatus>
+            </activation>
+
+            <!-- ===== Correlation =====
+                 Primary: cardnumber (library card / institutional ID)
+                 Secondary: userid (login name) as confirmation -->
+            <correlation>
+                <correlators>
+                    <items>
+                        <name>cardnumber-correlation</name>
+                        <item>
+                            <ref>ri:cardnumber</ref>
+                            <search>
+                                <path>name</path>
+                            </search>
+                        </item>
+                    </items>
+                    <items>
+                        <name>userid-correlation</name>
+                        <composition>
+                            <tier>2</tier>
+                        </composition>
+                        <item>
+                            <ref>icfs:name</ref>
+                            <search>
+                                <path>name</path>
+                            </search>
+                        </item>
+                    </items>
+                </correlators>
+            </correlation>
+
+            <!-- ===== Synchronization Reactions ===== -->
+            <synchronization>
+                <reaction>
+                    <situation>linked</situation>
+                    <actions>
+                        <synchronize/>
+                    </actions>
+                </reaction>
+                <reaction>
+                    <situation>unlinked</situation>
+                    <actions>
+                        <link/>
+                    </actions>
+                </reaction>
+                <reaction>
+                    <situation>unmatched</situation>
+                    <actions>
+                        <!-- Default: do not auto-create MidPoint users from Koha.
+                             Change to <addFocus/> if Koha is a source of truth. -->
+                        <inactivateShadow/>
+                    </actions>
+                </reaction>
+                <reaction>
+                    <situation>deleted</situation>
+                    <actions>
+                        <unlink/>
+                    </actions>
+                </reaction>
+                <reaction>
+                    <situation>disputed</situation>
+                    <actions>
+                        <createCorrelationCase/>
+                    </actions>
+                </reaction>
+            </synchronization>
         </objectType>
+
+        <!-- ===== ENTITLEMENT: Patron Categories (read-only) =====
+             Koha patron categories (e.g., Student, Professor, Staff) are managed
+             in Koha admin. MidPoint reads them as entitlements for reference
+             in category_id mappings but does not create/modify/delete them. -->
+        <objectType>
+            <kind>entitlement</kind>
+            <intent>default</intent>
+            <displayName>Patron Category</displayName>
+            <default>true</default>
+            <delineation>
+                <objectClass>ri:GroupObjectClass</objectClass>
+            </delineation>
+        </objectType>
+
     </schemaHandling>
 
+    <!-- ==================== Projection Policy ==================== -->
+    <projection>
+        <assignmentPolicyEnforcement>relative</assignmentPolicyEnforcement>
+    </projection>
+
+    <!-- ==================== Capabilities ==================== -->
+    <!--
+        Declared capabilities for connector-koha 1.2.0:
+          - schema: connector exposes patron + category object classes
+          - testConnection: validates OAuth2 token and API reachability
+          - create/read/update/delete: full CRUD for patrons
+          - activation: SIMULATED — no native enabled/disabled in Koha;
+            uses patron_card_lost + expiry_date dual mechanism
+    -->
     <capabilities>
         <configured>
-            <cap:schema/>
-            <cap:testConnection/>
-            <cap:create/>
-            <cap:read/>
-            <cap:update/>
-            <cap:delete/>
-            <cap:activation/>
+            <cap:schema>
+                <cap:enabled>true</cap:enabled>
+            </cap:schema>
+            <cap:testConnection>
+                <cap:enabled>true</cap:enabled>
+            </cap:testConnection>
+            <cap:create>
+                <cap:enabled>true</cap:enabled>
+            </cap:create>
+            <cap:read>
+                <cap:enabled>true</cap:enabled>
+            </cap:read>
+            <cap:update>
+                <cap:enabled>true</cap:enabled>
+            </cap:update>
+            <cap:delete>
+                <cap:enabled>true</cap:enabled>
+            </cap:delete>
+            <cap:activation>
+                <cap:status>
+                    <cap:enabled>true</cap:enabled>
+                    <cap:attribute>ri:__ENABLE__</cap:attribute>
+                    <cap:enableValue>true</cap:enableValue>
+                    <cap:disableValue>false</cap:disableValue>
+                    <cap:simulatedActivation>
+                        <cap:enabled>true</cap:enabled>
+                    </cap:simulatedActivation>
+                </cap:status>
+            </cap:activation>
         </configured>
     </capabilities>
 

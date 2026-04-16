@@ -2,10 +2,7 @@ package com.identicum.connectors.services;
 
 import com.identicum.connectors.KohaConfiguration;
 import com.identicum.connectors.KohaFilter;
-import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
 import com.identicum.connectors.services.HttpClientAdapter;
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.logging.Log;
@@ -61,21 +58,6 @@ public class CategoryService extends AbstractKohaService {
         }
     }
 
-    public JSONObject createCategory(JSONObject payload) throws ConnectorException, IOException {
-        HttpPost request = new HttpPost(getBaseUrl());
-        return callRequestWithEntity(request, payload); // Inherited
-    }
-
-    public void updateCategory(String uid, JSONObject payload) throws ConnectorException, IOException {
-        HttpPut request = new HttpPut(getBaseUrl() + "/" + uid);
-        callRequestWithEntity(request, payload); // Inherited, ignore return for void
-    }
-
-    public void deleteCategory(String uid) throws ConnectorException, IOException {
-        HttpDelete request = new HttpDelete(getBaseUrl() + "/" + uid);
-        callRequest(request); // Inherited
-    }
-
     public JSONArray searchCategories(KohaFilter filter, OperationOptions opts) throws ConnectorException, IOException {
         JSONArray allResults = new JSONArray();
         int pageSize = (opts != null && opts.getPageSize() != null) ? opts.getPageSize() : configuration.getPageSize();
@@ -99,7 +81,8 @@ public class CategoryService extends AbstractKohaService {
             HttpGet request = new HttpGet(fullUrl);
             LOG.info("CATEGORY_SEARCH: URL: {0}", request.getURI()); // Changed from LOG.ok
 
-            String response = callRequest(request); // Inherited
+            AbstractKohaService.HttpResult httpResult = callRequestFull(request); // Inherited
+            String response = httpResult.getBody();
             JSONArray pageResults;
 
             if (StringUtil.isBlank(response)) {
@@ -137,7 +120,11 @@ public class CategoryService extends AbstractKohaService {
                 }
             }
 
-            moreResults = pageResults.length() == pageSize;
+            if (httpResult.getTotalCount() != null) {
+                moreResults = allResults.length() < httpResult.getTotalCount();
+            } else {
+                moreResults = pageResults.length() == pageSize;
+            }
             pageCount++;
             if (pageCount >= MAX_PAGES) {
                 LOG.warn("Max pages limit ({0}) reached, stopping pagination. Results may be incomplete.", MAX_PAGES);

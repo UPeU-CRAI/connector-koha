@@ -12,14 +12,17 @@ import org.identityconnectors.framework.common.objects.Uid;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.json.JSONException;
 
 import org.identityconnectors.common.logging.Log;
+import org.identityconnectors.framework.common.objects.OperationalAttributes;
 
 /**
  * Mapper especializado para los objetos de tipo Patrón (Account).
@@ -93,7 +96,7 @@ public class PatronMapper extends BaseMapper {
         ATTRIBUTE_METADATA_MAP.put(ATTR_OPAC_NOTES, new AttributeMetadata(ATTR_OPAC_NOTES, "opac_notes", String.class));
         ATTRIBUTE_METADATA_MAP.put(ATTR_DATE_OF_BIRTH, new AttributeMetadata(ATTR_DATE_OF_BIRTH, "date_of_birth", String.class));
         ATTRIBUTE_METADATA_MAP.put(ATTR_EXPIRY_DATE, new AttributeMetadata(ATTR_EXPIRY_DATE, "expiry_date", String.class));
-        ATTRIBUTE_METADATA_MAP.put(ATTR_DATE_ENROLLED, new AttributeMetadata(ATTR_DATE_ENROLLED, "date_enrolled", String.class, AttributeMetadata.Flags.NOT_CREATABLE, AttributeMetadata.Flags.NOT_UPDATEABLE));
+        ATTRIBUTE_METADATA_MAP.put(ATTR_DATE_ENROLLED, new AttributeMetadata(ATTR_DATE_ENROLLED, "date_enrolled", String.class, AttributeMetadata.Flags.NOT_UPDATEABLE));
         ATTRIBUTE_METADATA_MAP.put(ATTR_DATE_RENEWED, new AttributeMetadata(ATTR_DATE_RENEWED, "date_renewed", String.class, AttributeMetadata.Flags.NOT_CREATABLE, AttributeMetadata.Flags.NOT_UPDATEABLE));
         ATTRIBUTE_METADATA_MAP.put(ATTR_INCORRECT_ADDRESS, new AttributeMetadata(ATTR_INCORRECT_ADDRESS, "incorrect_address", Boolean.class));
         ATTRIBUTE_METADATA_MAP.put(ATTR_PATRON_CARD_LOST, new AttributeMetadata(ATTR_PATRON_CARD_LOST, "patron_card_lost", Boolean.class));
@@ -114,6 +117,27 @@ public class PatronMapper extends BaseMapper {
 
         // Nota: extended_attributes requiere un manejo especial por ser una lista de objetos en Koha
         ATTRIBUTE_METADATA_MAP.put(ATTR_EXTENDED_ATTRIBUTES, new AttributeMetadata(ATTR_EXTENDED_ATTRIBUTES, "extended_attributes", String.class, AttributeMetadata.Flags.MULTIVALUED));
+
+        // New in Koha 25.x
+        ATTRIBUTE_METADATA_MAP.put("preferred_name", new AttributeMetadata("preferred_name", "preferred_name", String.class));
+        ATTRIBUTE_METADATA_MAP.put("pronouns", new AttributeMetadata("pronouns", "pronouns", String.class));
+        ATTRIBUTE_METADATA_MAP.put("primary_contact_method", new AttributeMetadata("primary_contact_method", "primary_contact_method", String.class));
+        ATTRIBUTE_METADATA_MAP.put("sms_number", new AttributeMetadata("sms_number", "sms_number", String.class));
+        ATTRIBUTE_METADATA_MAP.put("middle_name", new AttributeMetadata("middle_name", "middle_name", String.class));
+        ATTRIBUTE_METADATA_MAP.put("title", new AttributeMetadata("title", "title", String.class));
+        ATTRIBUTE_METADATA_MAP.put("other_name", new AttributeMetadata("other_name", "other_name", String.class));
+        ATTRIBUTE_METADATA_MAP.put("initials", new AttributeMetadata("initials", "initials", String.class));
+        ATTRIBUTE_METADATA_MAP.put("relationship_type", new AttributeMetadata("relationship_type", "relationship_type", String.class));
+        ATTRIBUTE_METADATA_MAP.put("sms_provider_id", new AttributeMetadata("sms_provider_id", "sms_provider_id", Integer.class));
+
+        // Alternate address fields
+        ATTRIBUTE_METADATA_MAP.put("altaddress_address", new AttributeMetadata("altaddress_address", "altaddress_address", String.class));
+        ATTRIBUTE_METADATA_MAP.put("altaddress_city", new AttributeMetadata("altaddress_city", "altaddress_city", String.class));
+        ATTRIBUTE_METADATA_MAP.put("altaddress_state", new AttributeMetadata("altaddress_state", "altaddress_state", String.class));
+        ATTRIBUTE_METADATA_MAP.put("altaddress_postal_code", new AttributeMetadata("altaddress_postal_code", "altaddress_postal_code", String.class));
+        ATTRIBUTE_METADATA_MAP.put("altaddress_country", new AttributeMetadata("altaddress_country", "altaddress_country", String.class));
+        ATTRIBUTE_METADATA_MAP.put("altaddress_email", new AttributeMetadata("altaddress_email", "altaddress_email", String.class));
+        ATTRIBUTE_METADATA_MAP.put("altaddress_phone", new AttributeMetadata("altaddress_phone", "altaddress_phone", String.class));
     }
 
     /**
@@ -128,13 +152,12 @@ public class PatronMapper extends BaseMapper {
         for (Attribute attr : attributes) {
             String connIdAttrName = attr.getName();
             if (Uid.NAME.equals(connIdAttrName)) {
-                LOG.ok("Trace Mapper: Omitiendo atributo Uid.NAME ({0}) directamente, se maneja por separado.", connIdAttrName);
+                LOG.ok("Skipping Uid.NAME attribute");
                 continue;
             }
 
             AttributeMetadata meta = Name.NAME.equals(connIdAttrName) ?
                     ATTRIBUTE_METADATA_MAP.get(nameAttribute) : ATTRIBUTE_METADATA_MAP.get(connIdAttrName);
-            LOG.ok("Trace Mapper: Procesando atributo ConnId: {0}, Meta: {1}", connIdAttrName, meta);
 
             if (meta == null) {
                 LOG.warn("No hay metadatos para el atributo de Patrón '{0}'. Omitiendo.", connIdAttrName);
@@ -142,21 +165,29 @@ public class PatronMapper extends BaseMapper {
             }
 
             if (!isCreate && meta.isNotUpdateable()) {
-                LOG.ok("Trace Mapper: Omitiendo atributo {0} debido a que es no actualizable", connIdAttrName);
+                LOG.ok("Skipping non-updateable: {0}", connIdAttrName);
                 continue;
             }
             if (isCreate && meta.isNotCreatable()) {
-                LOG.ok("Trace Mapper: Omitiendo atributo {0} debido a que es no creable", connIdAttrName);
+                LOG.ok("Skipping non-creatable: {0}", connIdAttrName);
+                continue;
+            }
+
+            // Special handling for extended_attributes
+            if ("extended_attributes".equals(meta.getConnIdName())) {
+                List<Object> values = attr.getValue();
+                if (values != null && !values.isEmpty()) {
+                    jo.put("extended_attributes", convertExtendedAttributesToKoha(values));
+                    processedKohaAttrs.add("extended_attributes");
+                }
                 continue;
             }
 
             List<Object> values = attr.getValue();
             if (values == null || values.isEmpty() || values.get(0) == null) {
                 if (!isCreate) { // Only set to NULL for updates
-                    LOG.ok("Trace Mapper: Estableciendo {0} a NULL en JSON para UPDATE", meta.getKohaNativeName());
+                    LOG.ok("Setting {0} to NULL", meta.getKohaNativeName());
                     jo.put(meta.getKohaNativeName(), JSONObject.NULL);
-                } else {
-                    LOG.ok("Trace Mapper: Omitiendo atributo {0} con valor nulo/vacío para CREATE.", connIdAttrName);
                 }
                 continue;
             }
@@ -164,7 +195,6 @@ public class PatronMapper extends BaseMapper {
             // Avoid processing the same Koha native attribute name multiple times if ConnId attributes map to it
             // (e.g. Name and a specific username attribute mapping to the same Koha field)
             if (processedKohaAttrs.contains(meta.getKohaNativeName())) {
-                LOG.ok("Trace Mapper: Atributo Koha nativo '{0}' ya procesado (posiblemente por Name y userid mapeando al mismo). Omitiendo para ConnId '{1}'.", meta.getKohaNativeName(), connIdAttrName);
                 continue;
             }
 
@@ -172,11 +202,10 @@ public class PatronMapper extends BaseMapper {
                     new JSONArray(values.stream().map(v -> convertConnIdValueToKohaJsonValue(v, meta)).filter(Objects::nonNull).toArray())
                     : convertConnIdValueToKohaJsonValue(values.get(0), meta);
 
-            LOG.ok("Trace Mapper: Mapeando ConnId '{0}' a Koha '{1}' con valor: {2}", connIdAttrName, meta.getKohaNativeName(), kohaValue);
             jo.put(meta.getKohaNativeName(), kohaValue);
             processedKohaAttrs.add(meta.getKohaNativeName());
         }
-        LOG.ok("JSON de Patrón construido: {0}", jo.toString(2));
+        LOG.ok("Patron JSON built with {0} fields", jo.length());
         return jo;
     }
 
@@ -185,7 +214,7 @@ public class PatronMapper extends BaseMapper {
      * Convierte un objeto JSON de un Patrón en un ConnectorObject.
      */
     public ConnectorObject convertJsonToPatronObject(JSONObject kohaJson) {
-        LOG.ok("Convirtiendo JSON de Koha a ConnectorObject (Patrón): {0}", kohaJson.toString(2));
+        LOG.ok("Converting Koha JSON to ConnectorObject, fields: {0}", kohaJson.length());
         if (kohaJson == null) {
             LOG.warn("El JSON de Koha proporcionado es nulo. Retornando nulo.");
             return null;
@@ -208,24 +237,29 @@ public class PatronMapper extends BaseMapper {
         String nameVal = null;
         if (nameAttributeMeta != null && kohaJson.has(nameAttributeMeta.getKohaNativeName())) {
             nameVal = kohaJson.optString(nameAttributeMeta.getKohaNativeName(), null);
-            LOG.ok("Trace Mapper: Mapeando Koha '{0}' a ConnId Name con valor: {1}", nameAttributeMeta.getKohaNativeName(), nameVal);
-        } else {
-            LOG.ok("Trace Mapper: Atributo Koha para Name (mapeado de 'userid') no encontrado o nulo en JSON. Usando UID como Name fallback.");
         }
         builder.setName(new Name(nameVal != null ? nameVal : uidVal)); // Fallback a UID si 'userid' no está o es nulo.
 
         // Resto de los atributos
         for (AttributeMetadata meta : ATTRIBUTE_METADATA_MAP.values()) {
-            LOG.ok("Trace Mapper: Considerando atributo Koha '{0}' (ConnId: '{1}')", meta.getKohaNativeName(), meta.getConnIdName());
-
             // Omitir el que ya se usó para Name.NAME si su ConnIdName es "userid"
             if ("userid".equals(meta.getConnIdName())) {
-                LOG.ok("Trace Mapper: Omitiendo el procesamiento explícito de '{0}' como atributo regular, ya manejado como Name.NAME.", meta.getConnIdName());
+                continue;
+            }
+
+            // Special handling for extended_attributes
+            if ("extended_attributes".equals(meta.getConnIdName()) && kohaJson.has("extended_attributes")) {
+                Object raw = kohaJson.get("extended_attributes");
+                if (raw instanceof JSONArray) {
+                    List<String> converted = convertExtendedAttributesFromKoha((JSONArray) raw);
+                    if (!converted.isEmpty()) {
+                        builder.addAttribute(AttributeBuilder.build("extended_attributes", converted));
+                    }
+                }
                 continue;
             }
 
             if (meta.isNotReadable() || !kohaJson.has(meta.getKohaNativeName()) || kohaJson.isNull(meta.getKohaNativeName())) {
-                LOG.ok("Trace Mapper: Omitiendo atributo Koha '{0}' porque no es leíble o no está presente/nulo en el JSON.", meta.getKohaNativeName());
                 continue;
             }
 
@@ -233,14 +267,73 @@ public class PatronMapper extends BaseMapper {
             Object connIdVal = convertKohaValueToConnIdValue(kohaNativeVal, meta);
 
             if (connIdVal != null) {
-                LOG.ok("Trace Mapper: Mapeando Koha '{0}' a ConnId '{1}' con valor: {2}", meta.getKohaNativeName(), meta.getConnIdName(), connIdVal);
                 builder.addAttribute(AttributeBuilder.build(meta.getConnIdName(), connIdVal));
-            } else {
-                LOG.ok("Trace Mapper: Valor convertido para ConnId '{0}' (desde Koha '{1}') es nulo. No se añadirá.", meta.getConnIdName(), meta.getKohaNativeName());
             }
         }
+        builder.addAttribute(OperationalAttributes.ENABLE_NAME, computeEnabled(kohaJson));
         ConnectorObject resultObject = builder.build();
-        LOG.ok("ConnectorObject (Patrón) construido: {0}", resultObject.toString()); // toString() de ConnectorObject es informativo.
+        LOG.ok("Patron ConnectorObject built: {0}", resultObject.getUid());
         return resultObject;
+    }
+
+    /**
+     * Applies the __ENABLE__ operational attribute to a Koha patron JSON payload.
+     * Dual mechanism: patron_card_lost for immediate block, expiry_date for temporal.
+     */
+    public void applyEnableAttribute(JSONObject payload, Boolean enabled) {
+        if (enabled == null) return;
+        if (!enabled) {
+            payload.put("patron_card_lost", true);
+            payload.put("expiry_date", java.time.LocalDate.now().minusDays(1).toString());
+        } else {
+            payload.put("patron_card_lost", false);
+            // expiry_date is NOT cleared here — managed by separate mapping
+        }
+    }
+
+    /**
+     * Computes the __ENABLE__ state from Koha patron JSON.
+     * Returns false if patron_card_lost=true OR expired=true.
+     */
+    public boolean computeEnabled(JSONObject kohaJson) {
+        boolean cardLost = kohaJson.optBoolean("patron_card_lost", false);
+        boolean expired = kohaJson.optBoolean("expired", false);
+        return !cardLost && !expired;
+    }
+
+    /**
+     * Converts Koha extended_attributes JSONArray to ConnId multivalued String list.
+     * Each element is a JSON string: {"type":"X","value":"Y"}
+     */
+    private List<String> convertExtendedAttributesFromKoha(JSONArray kohaAttrs) {
+        List<String> result = new ArrayList<>();
+        for (int i = 0; i < kohaAttrs.length(); i++) {
+            JSONObject attr = kohaAttrs.getJSONObject(i);
+            JSONObject normalized = new JSONObject();
+            normalized.put("type", attr.getString("type"));
+            normalized.put("value", attr.optString("value", ""));
+            result.add(normalized.toString());
+        }
+        return result;
+    }
+
+    /**
+     * Converts ConnId multivalued String list to Koha extended_attributes JSONArray.
+     * Each String element must be a valid JSON: {"type":"X","value":"Y"}
+     */
+    private JSONArray convertExtendedAttributesToKoha(List<Object> connIdValues) {
+        JSONArray result = new JSONArray();
+        for (Object val : connIdValues) {
+            if (val == null) continue;
+            try {
+                JSONObject parsed = new JSONObject(val.toString());
+                if (parsed.has("type")) {
+                    result.put(parsed);
+                }
+            } catch (JSONException e) {
+                LOG.warn("Skipping invalid extended_attribute value: {0}", val);
+            }
+        }
+        return result;
     }
 }

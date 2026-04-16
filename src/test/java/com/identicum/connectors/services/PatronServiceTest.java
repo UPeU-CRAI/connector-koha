@@ -3,7 +3,7 @@ package com.identicum.connectors.services;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
+import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.entity.ContentType;
@@ -80,10 +80,27 @@ public class PatronServiceTest {
     @Test
     void testUpdatePatronSuccess() throws Exception {
         CloseableHttpResponse resp = prepareResponse(200, "{}");
-        when(httpClient.execute(any(HttpPut.class))).thenReturn(resp);
+        when(httpClient.execute(any(HttpPatch.class))).thenReturn(resp);
 
         JSONObject payload = new JSONObject().put("email", "a@b.com");
         assertDoesNotThrow(() -> patronService.updatePatron("1", payload));
+    }
+
+    @Test
+    void testGetPatronSendsXKohaEmbedHeader() throws Exception {
+        CloseableHttpResponse resp = prepareResponse(200, "{\"patron_id\":1,\"userid\":\"jdoe\"}");
+        org.apache.http.client.methods.HttpGet[] capturedRequest = new org.apache.http.client.methods.HttpGet[1];
+        when(httpClient.execute(any(HttpGet.class))).thenAnswer(invocation -> {
+            capturedRequest[0] = invocation.getArgument(0);
+            return resp;
+        });
+
+        patronService.getPatron("1");
+
+        assertNotNull(capturedRequest[0], "Request should have been captured");
+        org.apache.http.Header embedHeader = capturedRequest[0].getFirstHeader("x-koha-embed");
+        assertNotNull(embedHeader, "x-koha-embed header should be present on GET patron");
+        assertEquals("extended_attributes", embedHeader.getValue());
     }
 
     @Test

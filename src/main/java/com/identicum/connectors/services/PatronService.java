@@ -6,7 +6,7 @@ import com.identicum.connectors.services.HttpClientAdapter;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
+import org.apache.http.client.methods.HttpPatch;
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
@@ -44,6 +44,7 @@ public class PatronService extends AbstractKohaService {
 
     public JSONObject getPatron(String uid) throws ConnectorException, IOException {
         HttpGet request = new HttpGet(getBaseUrl() + "/" + uid);
+        request.setHeader("x-koha-embed", "extended_attributes");
         String responseBody = callRequest(request);
         try {
             if (StringUtil.isBlank(responseBody)) {
@@ -61,7 +62,7 @@ public class PatronService extends AbstractKohaService {
     }
 
     public void updatePatron(String uid, JSONObject payload) throws ConnectorException, IOException {
-        HttpPut request = new HttpPut(getBaseUrl() + "/" + uid);
+        HttpPatch request = new HttpPatch(getBaseUrl() + "/" + uid);
         callRequestWithEntity(request, payload);
     }
 
@@ -88,13 +89,20 @@ public class PatronService extends AbstractKohaService {
                 if (StringUtil.isNotBlank(filter.getByName())) queryParams.add("userid=" + urlEncodeUTF8(filter.getByName()));
                 if (StringUtil.isNotBlank(filter.getByEmail())) queryParams.add("email=" + urlEncodeUTF8(filter.getByEmail()));
                 if (filter.getByCardNumber() != null) queryParams.add("cardnumber=" + urlEncodeUTF8(filter.getByCardNumber()));
+                if (StringUtil.isNotBlank(filter.getByCategoryId())) queryParams.add("category_id=" + urlEncodeUTF8(filter.getByCategoryId()));
+                if (StringUtil.isNotBlank(filter.getByLibraryId())) queryParams.add("library_id=" + urlEncodeUTF8(filter.getByLibraryId()));
+                if (filter.getMatchType() != null && !"exact".equals(filter.getMatchType())) {
+                    queryParams.add("_match=" + urlEncodeUTF8(filter.getMatchType()));
+                }
             }
 
             fullUrl = getBaseUrl() + "?" + String.join("&", queryParams);
             HttpGet request = new HttpGet(fullUrl);
+            request.setHeader("x-koha-embed", "extended_attributes");
             LOG.info("PATRON_SEARCH: URL: {0}", request.getURI());
 
-            String response = callRequest(request);
+            AbstractKohaService.HttpResult httpResult = callRequestFull(request);
+            String response = httpResult.getBody();
             JSONArray pageResults;
 
             if (StringUtil.isBlank(response)) {
@@ -127,7 +135,11 @@ public class PatronService extends AbstractKohaService {
                 }
             }
 
-            moreResults = pageResults.length() == pageSize;
+            if (httpResult.getTotalCount() != null) {
+                moreResults = allResults.length() < httpResult.getTotalCount();
+            } else {
+                moreResults = pageResults.length() == pageSize;
+            }
             pageCount++;
             if (pageCount >= MAX_PAGES) {
                 LOG.warn("Max pages limit ({0}) reached, stopping pagination. Results may be incomplete.", MAX_PAGES);

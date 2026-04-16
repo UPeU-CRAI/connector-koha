@@ -136,6 +136,9 @@ public class KohaConfiguration implements Configuration {
             if (username == null || username.trim().isEmpty()) {
                 throw new IllegalArgumentException("El nombre de usuario (username) es requerido para la autenticación BASIC.");
             }
+            if (password == null) {
+                throw new IllegalArgumentException("La contrasena (password) es requerida para la autenticacion BASIC.");
+            }
         } else if ("OAUTH2".equalsIgnoreCase(authenticationMethodStrategy)) {
             if (clientId == null || clientId.trim().isEmpty()) {
                 throw new IllegalArgumentException("El Client ID es requerido para la autenticación OAUTH2.");

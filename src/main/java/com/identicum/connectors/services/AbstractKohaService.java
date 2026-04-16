@@ -58,10 +58,7 @@ public abstract class AbstractKohaService {
             request.setEntity(new ByteArrayEntity(payload.toString().getBytes(StandardCharsets.UTF_8)));
         }
 
-        LOG.ok("Trace Mapper: Executing {0} request to {1}", request.getMethod(), request.getURI());
-        if (payload != null) {
-            LOG.ok("Trace Mapper: Request payload for {0} {1}: {2}", request.getMethod(), request.getURI(), payload.toString(2));
-        }
+        LOG.ok("Executing {0} request to {1}", request.getMethod(), request.getURI());
 
         try (CloseableHttpResponse response = executeWithRetry(() -> httpClient.execute(request))) {
             processResponseErrors(response, request);
@@ -70,10 +67,10 @@ public abstract class AbstractKohaService {
             // This handles cases where the API successfully processes a request but doesn't return a body (e.g., PUT/DELETE),
             // or when a POST might return 201 Created without a body (though often it returns the created resource).
             if (response.getStatusLine().getStatusCode() == 204 || StringUtil.isBlank(result)) {
-                LOG.ok("Trace Mapper: Response for {0} {1}: Empty or No Content.", request.getMethod(), request.getURI());
+                LOG.ok("Response {0} {1}: No Content", request.getMethod(), request.getURI());
                 return new JSONObject();
             }
-            LOG.ok("Trace Mapper: Response body for {0} {1}: {2}", request.getMethod(), request.getURI(), result);
+            LOG.ok("Response {0} {1}: {2} chars", request.getMethod(), request.getURI(), result.length());
             return new JSONObject(result);
         } catch (HttpHostConnectException e) {
             LOG.error(e, "Connection to Koha service at ''{0}'' failed for {1} {2}.", serviceAddress, request.getMethod(), request.getURI());
@@ -97,7 +94,7 @@ public abstract class AbstractKohaService {
         request.setHeader("Accept", "application/json");
         request.setHeader("Accept-Encoding", "gzip");
 
-        LOG.ok("Trace Mapper: Executing {0} request to {1}", request.getMethod(), request.getURI());
+        LOG.ok("Executing {0} request to {1}", request.getMethod(), request.getURI());
 
         try (CloseableHttpResponse response = executeWithRetry(() -> httpClient.execute(request))) {
             processResponseErrors(response, request);
@@ -105,7 +102,7 @@ public abstract class AbstractKohaService {
             if (entity == null) {
                 // If there's no entity (e.g. 204 No Content), return empty string.
                 // This is consistent with how EntityUtils.toString(null) would behave if not for our check.
-                LOG.ok("Trace Mapper: Response for {0} {1}: No entity in response.", request.getMethod(), request.getURI());
+                LOG.ok("Response {0} {1}: no entity", request.getMethod(), request.getURI());
                 return "";
             }
             InputStream inputStream = entity.getContent();
@@ -125,7 +122,7 @@ public abstract class AbstractKohaService {
             buffer.flush();
             byte[] bytes = buffer.toByteArray();
             String responseBodyString = new String(bytes, StandardCharsets.UTF_8);
-            LOG.ok("Trace Mapper: Response body for {0} {1}: {2}", request.getMethod(), request.getURI(), responseBodyString);
+            LOG.ok("Response {0} {1}: {2} chars", request.getMethod(), request.getURI(), responseBodyString.length());
             return responseBodyString;
         } catch (HttpHostConnectException e) {
             LOG.error(e, "Connection to Koha service at ''{0}'' failed for {1} {2}.", serviceAddress, request.getMethod(), request.getURI());
@@ -246,13 +243,26 @@ public abstract class AbstractKohaService {
                     uidPart = pathSegments[pathSegments.length -1];
                 }
                 // Only throw UnknownUidException for operations that typically target a specific resource by ID
-                if (request.getMethod().equals("GET") || request.getMethod().equals("PUT") || request.getMethod().equals("DELETE")) {
+                if (request.getMethod().equals("GET") || request.getMethod().equals("PUT") || request.getMethod().equals("PATCH") || request.getMethod().equals("DELETE")) {
                     throw new UnknownUidException("Koha " + getResourceName() + " not found (ID/Code: " + uidPart + "). Request: " + requestDesc + ", Status: " + statusCode + ", Body: " + body);
                 }
                 // For other methods like POST to a non-existent base path, or other 404s.
                 throw new ConnectorIOException(resourceContext + " endpoint/resource not found. Request: " + requestDesc + ", Status: " + statusCode + ", Body: " + body);
-            case 409: // Conflict
-                throw new AlreadyExistsException(resourceContext + " Conflict (e.g. resource version mismatch, or state prevents operation). Request: " + requestDesc + ", Status: " + statusCode + ", Body: " + body);
+            case 409: // Conflict - differentiated error messages for Koha patron deletion constraints
+                String lowerBody409 = body.toLowerCase();
+                String detail = "Conflict";
+                if (lowerBody409.contains("has_checkouts")) {
+                    detail = "Patron has active checkouts and cannot be deleted";
+                } else if (lowerBody409.contains("has_debt")) {
+                    detail = "Patron has outstanding debt and cannot be deleted";
+                } else if (lowerBody409.contains("is_protected")) {
+                    detail = "Patron is protected and cannot be deleted";
+                } else if (lowerBody409.contains("has_guarantees")) {
+                    detail = "Patron has guarantees and cannot be deleted";
+                } else if (lowerBody409.contains("is_anonymous_patron")) {
+                    detail = "Anonymous patron cannot be deleted";
+                }
+                throw new AlreadyExistsException(resourceContext + " " + detail + ". Request: " + requestDesc + ", Body: " + body);
             case 500:
             case 502:
             case 503:
@@ -273,5 +283,71 @@ public abstract class AbstractKohaService {
             // Usar RuntimeException como fallback temporal si ConnectorRuntimeException no se encuentra.
             throw new RuntimeException("UTF-8 encoding not supported. Original error: " + e.getMessage(), e);
         }
+    }
+
+    protected HttpResult callRequestFull(HttpRequestBase request) throws ConnectorException, IOException {
+        request.setHeader("Accept", "application/json");
+        request.setHeader("Accept-Encoding", "gzip");
+
+        LOG.ok("Executing {0} request to {1}", request.getMethod(), request.getURI());
+
+        try (CloseableHttpResponse response = executeWithRetry(() -> httpClient.execute(request))) {
+            processResponseErrors(response, request);
+
+            // Extract X-Total-Count header
+            Integer totalCount = null;
+            org.apache.http.Header totalCountHeader = response.getFirstHeader("X-Total-Count");
+            if (totalCountHeader != null) {
+                try {
+                    totalCount = Integer.parseInt(totalCountHeader.getValue());
+                } catch (NumberFormatException e) {
+                    LOG.warn("Invalid X-Total-Count header value: {0}", totalCountHeader.getValue());
+                }
+            }
+
+            HttpEntity entity = response.getEntity();
+            if (entity == null) {
+                return new HttpResult("", totalCount);
+            }
+            InputStream inputStream = entity.getContent();
+            Header contentEncoding = entity.getContentEncoding();
+            if (contentEncoding != null && "gzip".equalsIgnoreCase(contentEncoding.getValue())) {
+                inputStream = new GZIPInputStream(inputStream);
+            }
+            java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+            int nRead;
+            byte[] data = new byte[4096];
+            while ((nRead = inputStream.read(data, 0, data.length)) != -1) {
+                buffer.write(data, 0, nRead);
+            }
+            buffer.flush();
+            String responseBodyString = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+            LOG.ok("Response {0} {1}: {2} chars", request.getMethod(), request.getURI(), responseBodyString.length());
+            return new HttpResult(responseBodyString, totalCount);
+        } catch (HttpHostConnectException e) {
+            throw new ConnectionFailedException("Connection to Koha service at '" + serviceAddress + "' failed. Details: " + e.getMessage(), e);
+        } catch (SocketTimeoutException e) {
+            throw new ConnectionFailedException("Connection to Koha service timed out for request to '" + request.getURI() + "'. Details: " + e.getMessage(), e);
+        } catch (ClientProtocolException e) {
+            throw new ConnectorIOException("HTTP protocol error during request to '" + request.getURI() + "'. Details: " + e.getMessage(), e);
+        } catch (IOException e) {
+            throw new ConnectorIOException("IO error during request to '" + request.getURI() + "'. Details: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Wrapper for HTTP response body and selected headers.
+     */
+    protected static class HttpResult {
+        private final String body;
+        private final Integer totalCount;
+
+        public HttpResult(String body, Integer totalCount) {
+            this.body = body;
+            this.totalCount = totalCount;
+        }
+
+        public String getBody() { return body; }
+        public Integer getTotalCount() { return totalCount; }
     }
 }

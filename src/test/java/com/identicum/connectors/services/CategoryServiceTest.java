@@ -2,9 +2,6 @@ package com.identicum.connectors.services;
 
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import com.identicum.connectors.KohaConfiguration;
@@ -65,33 +62,6 @@ public class CategoryServiceTest {
     }
 
     @Test
-    void testCreateCategorySuccess() throws Exception {
-        CloseableHttpResponse resp = prepareResponse(200, "{\"patron_category_id\":\"C2\"}");
-        when(httpClient.execute(any(HttpPost.class))).thenReturn(resp);
-
-        JSONObject payload = new JSONObject().put("description", "Adults");
-        JSONObject created = categoryService.createCategory(payload);
-        assertEquals("C2", created.getString("patron_category_id"));
-    }
-
-    @Test
-    void testUpdateCategorySuccess() throws Exception {
-        CloseableHttpResponse resp = prepareResponse(200, "{}");
-        when(httpClient.execute(any(HttpPut.class))).thenReturn(resp);
-
-        JSONObject payload = new JSONObject().put("description", "Updated");
-        assertDoesNotThrow(() -> categoryService.updateCategory("C1", payload));
-    }
-
-    @Test
-    void testDeleteCategorySuccess() throws Exception {
-        CloseableHttpResponse resp = prepareResponse(204, null);
-        when(httpClient.execute(any(HttpDelete.class))).thenReturn(resp);
-
-        assertDoesNotThrow(() -> categoryService.deleteCategory("C1"));
-    }
-
-    @Test
     void testSearchCategoriesPagination() throws Exception {
         JSONArray page1 = new JSONArray()
                 .put(new JSONObject().put("patron_category_id", "C1"))
@@ -149,45 +119,4 @@ public class CategoryServiceTest {
         assertThrows(ConnectionFailedException.class, () -> categoryService.getCategory("C1"));
     }
 
-    // --- Casos de error HTTP para createCategory ---
-
-    @Test
-    void testCreateCategory_400_throwsInvalidAttributeValueException() throws Exception {
-        CloseableHttpResponse resp = prepareResponse(400, "{\"error\":\"Bad Request\"}");
-        when(httpClient.execute(any(HttpPost.class))).thenReturn(resp);
-        JSONObject payload = new JSONObject().put("description", "Adults");
-        assertThrows(InvalidAttributeValueException.class, () -> categoryService.createCategory(payload));
-    }
-
-    @Test
-    void testCreateCategory_401_throwsPermissionDeniedException() throws Exception {
-        CloseableHttpResponse resp = prepareResponse(401, "{\"error\":\"Unauthorized\"}");
-        when(httpClient.execute(any(HttpPost.class))).thenReturn(resp);
-        JSONObject payload = new JSONObject().put("description", "Adults");
-        assertThrows(PermissionDeniedException.class, () -> categoryService.createCategory(payload));
-    }
-
-    @Test
-    void testCreateCategory_403_throwsPermissionDeniedException() throws Exception {
-        CloseableHttpResponse resp = prepareResponse(403, "{\"error\":\"Forbidden\"}");
-        when(httpClient.execute(any(HttpPost.class))).thenReturn(resp);
-        JSONObject payload = new JSONObject().put("description", "Adults");
-        assertThrows(PermissionDeniedException.class, () -> categoryService.createCategory(payload));
-    }
-
-    @Test
-    void testCreateCategory_409_throwsAlreadyExistsException() throws Exception {
-        CloseableHttpResponse resp = prepareResponse(409, "{\"error\":\"Conflict\"}");
-        when(httpClient.execute(any(HttpPost.class))).thenReturn(resp);
-        JSONObject payload = new JSONObject().put("description", "ExistingCategory");
-        assertThrows(AlreadyExistsException.class, () -> categoryService.createCategory(payload));
-    }
-
-    @Test
-    void testCreateCategory_500_throwsConnectionFailedException() throws Exception {
-        CloseableHttpResponse resp = prepareResponse(500, "{\"error\":\"Internal Server Error\"}");
-        when(httpClient.execute(any(HttpPost.class))).thenReturn(resp);
-        JSONObject payload = new JSONObject().put("description", "Adults");
-        assertThrows(ConnectionFailedException.class, () -> categoryService.createCategory(payload));
-    }
 }

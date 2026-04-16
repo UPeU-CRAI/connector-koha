@@ -2,6 +2,7 @@ package com.identicum.connectors;
 
 import com.identicum.connectors.services.CategoryService;
 import com.identicum.connectors.services.PatronService;
+import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.exceptions.ConnectorIOException;
 import org.identityconnectors.framework.common.objects.Attribute;
 import org.identityconnectors.framework.common.objects.AttributeBuilder;
@@ -169,5 +170,29 @@ public class KohaConnectorIntegrationTest {
 
         assertDoesNotThrow(() -> connector.delete(ObjectClass.ACCOUNT, new Uid("5"), new OperationOptionsBuilder().build()));
         verify(patronService, times(1)).deletePatron("5");
+    }
+
+    @Test
+    void create_group_throwsConnectorException() {
+        Set<Attribute> attrs = new HashSet<>();
+        attrs.add(AttributeBuilder.build("name", "ESTUDI"));
+
+        assertThrows(UnsupportedOperationException.class,
+            () -> connector.create(ObjectClass.GROUP, attrs, new OperationOptionsBuilder().build()));
+    }
+
+    @Test
+    void update_group_throwsConnectorException() {
+        Set<Attribute> attrs = new HashSet<>();
+        attrs.add(AttributeBuilder.build("description", "Updated"));
+
+        assertThrows(UnsupportedOperationException.class,
+            () -> connector.update(ObjectClass.GROUP, new Uid("ESTUDI"), attrs, new OperationOptionsBuilder().build()));
+    }
+
+    @Test
+    void delete_group_throwsConnectorException() {
+        assertThrows(UnsupportedOperationException.class,
+            () -> connector.delete(ObjectClass.GROUP, new Uid("ESTUDI"), new OperationOptionsBuilder().build()));
     }
 }
