@@ -1,0 +1,325 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectModification
+    xmlns="http://midpoint.evolveum.com/xml/ns/public/common/api-types-3"
+    xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+    xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3"
+    xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3"
+    xmlns:ri="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3"
+    xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3">
+    <itemDelta>
+        <t:modificationType>replace</t:modificationType>
+        <t:path>c:schemaHandling</t:path>
+        <t:value>
+            <!-- ===== ACCOUNT: Patrones Koha / Usuarios UPeU ===== -->
+            <c:objectType>
+                <c:kind>account</c:kind>
+                <c:intent>default</c:intent>
+                <c:displayName>Koha Patron</c:displayName>
+                <c:default>true</c:default>
+                <c:delineation>
+                    <c:objectClass>ri:AccountObjectClass</c:objectClass>
+                </c:delineation>
+                <c:focus>
+                    <c:type>c:UserType</c:type>
+                </c:focus>
+
+                <!-- userid — login Koha = name MidPoint -->
+                <c:attribute>
+                    <c:ref>ri:userid</c:ref>
+                    <c:displayName>User ID (login)</c:displayName>
+                    <c:outbound>
+                        <c:name>userid-outbound</c:name>
+                        <c:strength>strong</c:strength>
+                        <c:source>
+                            <c:path>$focus/name</c:path>
+                        </c:source>
+                    </c:outbound>
+                    <c:inbound>
+                        <c:name>userid-inbound</c:name>
+                        <c:strength>weak</c:strength>
+                        <c:target>
+                            <c:path>$user/name</c:path>
+                        </c:target>
+                    </c:inbound>
+                </c:attribute>
+
+                <!-- cardnumber — clave de correlación primaria = name MidPoint (ID institucional) -->
+                <c:attribute>
+                    <c:ref>ri:cardnumber</c:ref>
+                    <c:displayName>Número de Carnet</c:displayName>
+                    <c:outbound>
+                        <c:name>cardnumber-outbound</c:name>
+                        <c:strength>strong</c:strength>
+                        <c:source>
+                            <c:path>$focus/name</c:path>
+                        </c:source>
+                    </c:outbound>
+                    <c:inbound>
+                        <c:name>cardnumber-inbound</c:name>
+                        <c:strength>strong</c:strength>
+                        <c:target>
+                            <c:path>$user/name</c:path>
+                        </c:target>
+                    </c:inbound>
+                </c:attribute>
+
+                <!-- surname -->
+                <c:attribute>
+                    <c:ref>ri:surname</c:ref>
+                    <c:displayName>Apellido(s)</c:displayName>
+                    <c:outbound>
+                        <c:name>surname-outbound</c:name>
+                        <c:strength>normal</c:strength>
+                        <c:source>
+                            <c:path>$focus/familyName</c:path>
+                        </c:source>
+                    </c:outbound>
+                    <c:inbound>
+                        <c:name>surname-inbound</c:name>
+                        <c:strength>weak</c:strength>
+                        <c:target>
+                            <c:path>$user/familyName</c:path>
+                        </c:target>
+                    </c:inbound>
+                </c:attribute>
+
+                <!-- firstname -->
+                <c:attribute>
+                    <c:ref>ri:firstname</c:ref>
+                    <c:displayName>Nombre(s)</c:displayName>
+                    <c:outbound>
+                        <c:name>firstname-outbound</c:name>
+                        <c:strength>normal</c:strength>
+                        <c:source>
+                            <c:path>$focus/givenName</c:path>
+                        </c:source>
+                    </c:outbound>
+                    <c:inbound>
+                        <c:name>firstname-inbound</c:name>
+                        <c:strength>weak</c:strength>
+                        <c:target>
+                            <c:path>$user/givenName</c:path>
+                        </c:target>
+                    </c:inbound>
+                </c:attribute>
+
+                <!-- email -->
+                <c:attribute>
+                    <c:ref>ri:email</c:ref>
+                    <c:displayName>Correo Electrónico</c:displayName>
+                    <c:outbound>
+                        <c:name>email-outbound</c:name>
+                        <c:strength>normal</c:strength>
+                        <c:source>
+                            <c:path>$focus/emailAddress</c:path>
+                        </c:source>
+                    </c:outbound>
+                    <c:inbound>
+                        <c:name>email-inbound</c:name>
+                        <c:strength>weak</c:strength>
+                        <c:target>
+                            <c:path>$user/emailAddress</c:path>
+                        </c:target>
+                    </c:inbound>
+                </c:attribute>
+
+                <!-- phone -->
+                <c:attribute>
+                    <c:ref>ri:phone</c:ref>
+                    <c:displayName>Teléfono</c:displayName>
+                    <c:outbound>
+                        <c:name>phone-outbound</c:name>
+                        <c:strength>normal</c:strength>
+                        <c:source>
+                            <c:path>$focus/telephoneNumber</c:path>
+                        </c:source>
+                    </c:outbound>
+                </c:attribute>
+
+                <!-- sms_number -->
+                <c:attribute>
+                    <c:ref>ri:sms_number</c:ref>
+                    <c:displayName>Número SMS</c:displayName>
+                    <c:outbound>
+                        <c:name>sms-number-outbound</c:name>
+                        <c:strength>weak</c:strength>
+                        <c:source>
+                            <c:path>$focus/telephoneNumber</c:path>
+                        </c:source>
+                    </c:outbound>
+                </c:attribute>
+
+                <!-- statistics_1 — facultad -->
+                <c:attribute>
+                    <c:ref>ri:statistics_1</c:ref>
+                    <c:displayName>Facultad (Statistics 1)</c:displayName>
+                    <c:outbound>
+                        <c:name>statistics1-outbound</c:name>
+                        <c:strength>normal</c:strength>
+                        <c:source>
+                            <c:path>$focus/organizationalUnit</c:path>
+                        </c:source>
+                    </c:outbound>
+                </c:attribute>
+
+                <!-- statistics_2 — programa académico -->
+                <c:attribute>
+                    <c:ref>ri:statistics_2</c:ref>
+                    <c:displayName>Programa Académico (Statistics 2)</c:displayName>
+                    <c:outbound>
+                        <c:name>statistics2-outbound</c:name>
+                        <c:strength>normal</c:strength>
+                        <c:source>
+                            <c:path>$focus/department</c:path>
+                        </c:source>
+                    </c:outbound>
+                </c:attribute>
+
+                <!-- category_id — según employeeType UPeU →
+                     ESTUDI=Estudiante, DOCEN=Profesor, ADMIN→STAFF, EGRES→VISITA -->
+                <c:attribute>
+                    <c:ref>ri:category_id</c:ref>
+                    <c:displayName>Categoría Patrón Koha</c:displayName>
+                    <c:outbound>
+                        <c:name>category-id-outbound</c:name>
+                        <c:strength>strong</c:strength>
+                        <c:source>
+                            <c:path>$focus/extension/employeeType</c:path>
+                        </c:source>
+                        <c:expression>
+                            <c:script>
+                                <c:code>
+if (input == null) return null
+switch (input.toString().trim()) {
+    case 'ESTUDI': return 'ESTUDI'
+    case 'DOCEN':  return 'DOCEN'
+    case 'ADMIN':  return 'STAFF'
+    case 'EGRES':  return 'VISITA'
+    default:       return 'VISITA'
+}
+                                </c:code>
+                            </c:script>
+                        </c:expression>
+                    </c:outbound>
+                </c:attribute>
+
+                <!-- library_id — según campus UPeU (locality) -->
+                <c:attribute>
+                    <c:ref>ri:library_id</c:ref>
+                    <c:displayName>Sede Biblioteca</c:displayName>
+                    <c:outbound>
+                        <c:name>library-id-outbound</c:name>
+                        <c:strength>strong</c:strength>
+                        <c:source>
+                            <c:path>$focus/locality</c:path>
+                        </c:source>
+                        <c:expression>
+                            <c:script>
+                                <c:code>
+if (input == null) return 'BUL'
+switch (input.toString().trim().toUpperCase()) {
+    case 'LIMA':     return 'BUL'
+    case 'JULIACA':  return 'BUJ'
+    case 'TARAPOTO': return 'BUT'
+    case 'CIA':
+    case 'ICA':      return 'CIA'
+    default:         return 'BUL'
+}
+                                </c:code>
+                            </c:script>
+                        </c:expression>
+                    </c:outbound>
+                </c:attribute>
+
+                <!-- expiry_date — desde activation/validTo -->
+                <c:attribute>
+                    <c:ref>ri:expiry_date</c:ref>
+                    <c:displayName>Fecha de Expiración</c:displayName>
+                    <c:outbound>
+                        <c:name>expiry-date-outbound</c:name>
+                        <c:strength>normal</c:strength>
+                        <c:source>
+                            <c:path>$focus/activation/validTo</c:path>
+                        </c:source>
+                        <c:expression>
+                            <c:script>
+                                <c:code>
+if (input == null) return null
+input instanceof javax.xml.datatype.XMLGregorianCalendar ?
+    input.toGregorianCalendar().toZonedDateTime().toLocalDate().toString() :
+    input.toString().take(10)
+                                </c:code>
+                            </c:script>
+                        </c:expression>
+                    </c:outbound>
+                </c:attribute>
+
+                <!-- Activación simulada: patron_card_lost + expiry_date -->
+                <c:activation>
+                    <c:administrativeStatus>
+                        <c:outbound>
+                            <c:name>activation-outbound</c:name>
+                            <c:strength>strong</c:strength>
+                        </c:outbound>
+                    </c:administrativeStatus>
+                </c:activation>
+
+                <!-- Correlación: <ref> apunta al atributo del FOCUS
+                     MidPoint encuentra el shadow attribute a través de los inbound mappings
+                     cardnumber inbound → $user/name (strong), por eso correlamos por 'name' -->
+                <c:correlation>
+                    <c:correlators>
+                        <c:items>
+                            <c:name>correlate-by-cardnumber</c:name>
+                            <c:item>
+                                <c:ref>name</c:ref>
+                            </c:item>
+                        </c:items>
+                    </c:correlators>
+                </c:correlation>
+
+                <!-- Sincronización — Lifecycle Joiner/Mover/Leaver -->
+                <c:synchronization>
+                    <c:reaction>
+                        <c:situation>linked</c:situation>
+                        <c:actions><c:synchronize/></c:actions>
+                    </c:reaction>
+                    <c:reaction>
+                        <c:situation>unlinked</c:situation>
+                        <c:actions><c:link/></c:actions>
+                    </c:reaction>
+                    <c:reaction>
+                        <c:situation>unmatched</c:situation>
+                        <c:actions><c:inactivateResourceObject/></c:actions>
+                    </c:reaction>
+                    <c:reaction>
+                        <c:situation>deleted</c:situation>
+                        <c:actions><c:unlink/></c:actions>
+                    </c:reaction>
+                    <c:reaction>
+                        <c:situation>disputed</c:situation>
+                        <c:actions><c:createCorrelationCase/></c:actions>
+                    </c:reaction>
+                </c:synchronization>
+            </c:objectType>
+
+            <!-- ENTITLEMENT: Categorías de Patrón (solo lectura) -->
+            <c:objectType>
+                <c:kind>entitlement</c:kind>
+                <c:intent>default</c:intent>
+                <c:displayName>Categoría de Patrón</c:displayName>
+                <c:default>true</c:default>
+                <c:delineation>
+                    <c:objectClass>ri:GroupObjectClass</c:objectClass>
+                </c:delineation>
+            </c:objectType>
+        </t:value>
+    </itemDelta>
+    <itemDelta>
+        <t:modificationType>replace</t:modificationType>
+        <t:path>c:projection</t:path>
+        <t:value>
+            <c:assignmentPolicyEnforcement>relative</c:assignmentPolicyEnforcement>
+        </t:value>
+    </itemDelta>
+</objectModification>
