@@ -121,8 +121,9 @@ public class PatronServiceTest {
         CloseableHttpResponse resp2 = prepareResponse(200, page2.toString());
         when(httpClient.execute(any(HttpGet.class))).thenReturn(resp1, resp2);
 
-        JSONArray result = patronService.searchPatrons(null, new OperationOptionsBuilder().setPageSize(2).build());
-        assertEquals(3, result.length());
+        java.util.List<JSONObject> result = new java.util.ArrayList<>();
+        patronService.searchPatrons(null, new OperationOptionsBuilder().setPageSize(2).build(), patron -> { result.add(patron); return true; });
+        assertEquals(3, result.size());
     }
 
     // --- Casos de error HTTP para getPatron ---
