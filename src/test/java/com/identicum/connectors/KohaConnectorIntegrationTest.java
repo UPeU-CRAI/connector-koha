@@ -55,14 +55,14 @@ public class KohaConnectorIntegrationTest {
 
     @Test
     void testTestSuccessful() throws Exception {
-        when(patronService.searchPatrons(any(), any())).thenReturn(new JSONArray());
+        doNothing().when(patronService).testConnection();
         assertDoesNotThrow(() -> connector.test());
-        verify(patronService, times(1)).searchPatrons(any(), any());
+        verify(patronService, times(1)).testConnection();
     }
 
     @Test
     void testTestPropagatesException() throws Exception {
-        when(patronService.searchPatrons(any(), any())).thenThrow(new ConnectorIOException("fail"));
+        doThrow(new ConnectorIOException("fail")).when(patronService).testConnection();
         assertThrows(ConnectorIOException.class, () -> connector.test());
     }
 

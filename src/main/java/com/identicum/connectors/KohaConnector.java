@@ -284,9 +284,9 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 			}
 			LOG.ok("Paso 1/2: Obtención y validación básica del esquema exitosa.");
 
-			// Paso 2: Probar búsqueda básica de patrones (conectividad y autenticación)
-			LOG.ok("Paso 2/2: Probando búsqueda básica de patrones (conectividad y autenticación)...");
-			patronService.searchPatrons(null, new OperationOptionsBuilder().setPageSize(1).build());
+			// Paso 2: Probar conectividad (single GET, sin paginación)
+			LOG.ok("Paso 2/2: Probando conectividad...");
+			patronService.testConnection();
 
 			LOG.ok("Prueba de conexión y configuración básica completada con éxito.");
 

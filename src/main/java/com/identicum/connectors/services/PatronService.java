@@ -71,6 +71,15 @@ public class PatronService extends AbstractKohaService {
         callRequest(request);
     }
 
+    /**
+     * Simple connectivity test: fetches a single patron page without pagination loop.
+     */
+    public void testConnection() throws ConnectorException, IOException {
+        HttpGet request = new HttpGet(getBaseUrl() + "?_per_page=1&_page=1");
+        request.setHeader("Accept", "application/json");
+        callRequest(request);
+    }
+
     public JSONArray searchPatrons(KohaFilter filter, OperationOptions opts) throws ConnectorException, IOException {
         JSONArray allResults = new JSONArray();
         int pageSize = (opts != null && opts.getPageSize() != null) ? opts.getPageSize() : configuration.getPageSize();
