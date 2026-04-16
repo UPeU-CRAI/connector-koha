@@ -18,6 +18,7 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * Servicio para gestionar las operaciones CRUD y de búsqueda para los Patrones de Koha.
@@ -80,15 +81,16 @@ public class PatronService extends AbstractKohaService {
         callRequest(request);
     }
 
-    public JSONArray searchPatrons(KohaFilter filter, OperationOptions opts) throws ConnectorException, IOException {
-        JSONArray allResults = new JSONArray();
+    public void searchPatrons(KohaFilter filter, OperationOptions opts, Predicate<JSONObject> consumer) throws ConnectorException, IOException {
         int pageSize = (opts != null && opts.getPageSize() != null) ? opts.getPageSize() : configuration.getPageSize();
         int currentPage = 1;
         int pageCount = 0;
+        int totalDelivered = 0;
         final int MAX_PAGES = 1000;
         boolean moreResults;
         String fullUrl;
 
+        outer:
         do {
             List<String> queryParams = new ArrayList<>();
             queryParams.add("_per_page=" + pageSize);
@@ -138,14 +140,18 @@ public class PatronService extends AbstractKohaService {
 
             for (int i = 0; i < pageResults.length(); i++) {
                 try {
-                    allResults.put(pageResults.getJSONObject(i));
+                    JSONObject patron = pageResults.getJSONObject(i);
+                    if (!consumer.test(patron)) {
+                        break outer;
+                    }
+                    totalDelivered++;
                 } catch (JSONException e) {
                     throw new ConnectorException("Error processing individual patron from search results. URL: " + fullUrl + ", Entry: " + pageResults.opt(i), e);
                 }
             }
 
             if (httpResult.getTotalCount() != null) {
-                moreResults = allResults.length() < httpResult.getTotalCount();
+                moreResults = totalDelivered < httpResult.getTotalCount();
             } else {
                 moreResults = pageResults.length() == pageSize;
             }
@@ -157,7 +163,5 @@ public class PatronService extends AbstractKohaService {
             if (moreResults) currentPage++;
 
         } while (moreResults);
-
-        return allResults;
     }
 }

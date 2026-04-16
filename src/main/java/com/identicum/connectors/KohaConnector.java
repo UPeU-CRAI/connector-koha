@@ -223,14 +223,10 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 						LOG.info("Resultados de búsqueda por UID para {0}: 0 (Patrón no encontrado o vacío)", oClass);
 					}
 				} else {
-					JSONArray results = patronService.searchPatrons(filter, options);
-					LOG.info("Resultados de búsqueda para {0}: {1}", oClass, results != null ? results.length() : 0);
-					if (results != null) {
-						for (int i = 0; i < results.length(); i++) {
-							ConnectorObject co = patronMapper.convertJsonToPatronObject(results.getJSONObject(i));
-							if (co != null && !handler.handle(co)) break;
-						}
-					}
+					patronService.searchPatrons(filter, options, patronJson -> {
+						ConnectorObject co = patronMapper.convertJsonToPatronObject(patronJson);
+						return co == null || handler.handle(co);
+					});
 				}
 			} else if (ObjectClass.GROUP.is(oClass.getObjectClassValue())) {
 				if (filter != null && filter.getByUid() != null) {

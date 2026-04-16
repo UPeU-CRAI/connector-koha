@@ -11,7 +11,6 @@ import org.identityconnectors.framework.common.objects.OperationOptions;
 import org.identityconnectors.framework.common.objects.OperationOptionsBuilder;
 import org.identityconnectors.framework.common.objects.ResultsHandler;
 import org.identityconnectors.framework.common.objects.Uid;
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -103,8 +102,12 @@ public class KohaConnectorIntegrationTest {
                 .put("cardnumber", "ABC001")
                 .put("library_id", "LIB1")
                 .put("category_id", "S");
-        JSONArray results = new JSONArray().put(patronJson);
-        when(patronService.searchPatrons(any(KohaFilter.class), any())).thenReturn(results);
+
+        doAnswer(invocation -> {
+            java.util.function.Predicate<JSONObject> consumer = invocation.getArgument(2);
+            consumer.test(patronJson);
+            return null;
+        }).when(patronService).searchPatrons(any(KohaFilter.class), any(), any());
 
         KohaFilter filter = new KohaFilter();
         filter.setByCardNumber("ABC001");
@@ -120,7 +123,7 @@ public class KohaConnectorIntegrationTest {
 
         assertEquals(1, foundUids.size());
         assertEquals("7", foundUids.get(0));
-        verify(patronService, times(1)).searchPatrons(any(KohaFilter.class), any());
+        verify(patronService, times(1)).searchPatrons(any(KohaFilter.class), any(), any());
     }
 
     @Test
