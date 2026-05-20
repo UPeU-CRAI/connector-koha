@@ -124,7 +124,14 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 					patronMapper.applyEnableAttribute(payload, enabled);
 				}
 				JSONObject response = patronService.createPatron(payload);
-				newUidValue = String.valueOf(response.get(PatronMapper.KOHA_PATRON_ID_NATIVE_NAME));
+				Object patronIdObj = response.opt(PatronMapper.KOHA_PATRON_ID_NATIVE_NAME);
+				if (patronIdObj == null || patronIdObj == JSONObject.NULL) {
+					throw new ConnectorException("Koha CREATE patron devolvió respuesta sin " + PatronMapper.KOHA_PATRON_ID_NATIVE_NAME + ". Response: " + response);
+				}
+				newUidValue = String.valueOf(patronIdObj);
+				if ("null".equals(newUidValue) || newUidValue.trim().isEmpty()) {
+					throw new ConnectorException("Koha CREATE patron devolvió " + PatronMapper.KOHA_PATRON_ID_NATIVE_NAME + " nulo o vacío. Response: " + response);
+				}
 			} else if (ObjectClass.GROUP.is(oClass.getObjectClassValue())) {
 				throw new UnsupportedOperationException("Patron categories are read-only in Koha API");
 			} else {
