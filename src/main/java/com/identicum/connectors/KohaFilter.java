@@ -25,7 +25,7 @@ public class KohaFilter {
     void setByUid(String byUid) { this.byUid = byUid; }
     void setByName(String byName) { this.byName = byName; }
     void setByEmail(String byEmail) { this.byEmail = byEmail; }
-    void setByCardNumber(String byCardNumber) { this.byCardNumber = byCardNumber; }
+    public void setByCardNumber(String byCardNumber) { this.byCardNumber = byCardNumber; }
     public void setMatchType(String matchType) { this.matchType = matchType; }
     public void setByCategoryId(String byCategoryId) { this.byCategoryId = byCategoryId; }
     public void setByLibraryId(String byLibraryId) { this.byLibraryId = byLibraryId; }
