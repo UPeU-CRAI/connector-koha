@@ -7,9 +7,12 @@ import com.identicum.connectors.services.CategoryService;
 import com.identicum.connectors.services.PatronService;
 import com.identicum.connectors.services.HttpClientAdapter;
 import com.identicum.connectors.services.DefaultHttpClientAdapter;
+import com.identicum.connectors.services.JdbcConnectionProvider;
+import com.identicum.connectors.services.PatronImageService;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.common.StringUtil;
+import org.identityconnectors.common.security.GuardedString;
 import org.identityconnectors.framework.common.exceptions.ConfigurationException;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.exceptions.ConnectorIOException;
@@ -40,6 +43,10 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 	private HttpClientAdapter httpAdapter;
 	private PatronService patronService;
 	private CategoryService categoryService;
+	// Canal JDBC opcional para la foto del patron (tabla patronimage).
+	// Nulos si dbEnabled=false o si la BD no estuvo disponible al init().
+	private JdbcConnectionProvider jdbcConnectionProvider;
+	private PatronImageService patronImageService;
 	private final PatronMapper patronMapper = new PatronMapper();
 	private final CategoryMapper categoryMapper = new CategoryMapper();
 	private final AtomicReference<Schema> connectorSchema = new AtomicReference<>();
@@ -69,6 +76,47 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 			dispose(); // Limpiar recursos en caso de fallo
 			throw new ConfigurationException("Fallo durante la inicialización de los servicios del conector: " + e.getMessage(), e);
 		}
+
+		// --- Inicializacion del canal JDBC opcional (foto del patron) ---
+		// Degradacion elegante: si la BD falla, se registra un warning y el
+		// conector continua operativo solo en modo REST. La operacion test()
+		// si fallara mas adelante (eso se decide en test(), no aqui).
+		if (this.configuration.getDbEnabled()) {
+			try {
+				String dbPassword = extractGuardedString(this.configuration.getDbPassword());
+				this.jdbcConnectionProvider = new JdbcConnectionProvider(
+						this.configuration.getDbHost(),
+						this.configuration.getDbPort(),
+						this.configuration.getDbName(),
+						this.configuration.getDbUser(),
+						dbPassword,
+						this.configuration.getDbPoolSize());
+				this.patronImageService = new PatronImageService(this.jdbcConnectionProvider);
+				LOG.ok("Canal JDBC para foto de patron inicializado.");
+			} catch (Exception e) {
+				// No abortar el init: REST sigue operativo.
+				LOG.warn(e, "No se pudo inicializar el canal JDBC para la foto del patron. "
+						+ "El conector continua en modo REST unicamente. Detalle: {0}", e.getMessage());
+				this.jdbcConnectionProvider = null;
+				this.patronImageService = null;
+			}
+		} else {
+			LOG.ok("Canal JDBC deshabilitado (dbEnabled=false). Conector en modo REST unicamente.");
+		}
+	}
+
+	/**
+	 * Extrae el valor en claro de un {@link GuardedString} usando el patron
+	 * {@code accessor} de ConnId. El valor se copia a un {@code String} solo
+	 * el tiempo imprescindible para configurar el DataSource.
+	 */
+	private String extractGuardedString(GuardedString guarded) {
+		if (guarded == null) {
+			return null;
+		}
+		final StringBuilder sb = new StringBuilder();
+		guarded.access(chars -> sb.append(chars));
+		return sb.toString();
 	}
 
 	@Override
@@ -80,6 +128,12 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 			}
 		} catch (IOException e) {
 			LOG.error("Error al cerrar el cliente HTTP: {0}", e.getMessage(), e);
+		}
+		// Cerrar el pool JDBC si fue inicializado.
+		if (jdbcConnectionProvider != null) {
+			jdbcConnectionProvider.close();
+			jdbcConnectionProvider = null;
+			patronImageService = null;
 		}
 	}
 
@@ -132,6 +186,9 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 				if ("null".equals(newUidValue) || newUidValue.trim().isEmpty()) {
 					throw new ConnectorException("Koha CREATE patron devolvió " + PatronMapper.KOHA_PATRON_ID_NATIVE_NAME + " nulo o vacío. Response: " + response);
 				}
+				// La foto se escribe DESPUES del POST REST: necesita el
+				// borrowernumber (= patron_id = __UID__) recien devuelto por Koha.
+				applyPhotoFromAttributes(newUidValue, attrs);
 			} else if (ObjectClass.GROUP.is(oClass.getObjectClassValue())) {
 				throw new UnsupportedOperationException("Patron categories are read-only in Koha API");
 			} else {
@@ -166,7 +223,15 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 					Boolean enabled = AttributeUtil.getBooleanValue(enableAttr);
 					patronMapper.applyEnableAttribute(changes, enabled);
 				}
-				patronService.updatePatron(uid.getUidValue(), changes);
+				// buildPatronJson excluye photo/photo_mimetype del payload REST.
+				// El PATCH REST solo se envia si quedan cambios reales que aplicar.
+				if (changes.length() > 0) {
+					patronService.updatePatron(uid.getUidValue(), changes);
+				} else {
+					LOG.ok("Update Uid {0}: sin cambios REST (solo atributos de foto).", uid.getUidValue());
+				}
+				// La foto se procesa por el canal JDBC.
+				applyPhotoFromAttributes(uid.getUidValue(), attrs);
 			} else if (ObjectClass.GROUP.is(oClass.getObjectClassValue())) {
 				throw new UnsupportedOperationException("Patron categories are read-only in Koha API");
 			} else {
@@ -221,10 +286,15 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 				options);
 		try {
 			if (ObjectClass.ACCOUNT.is(oClass.getObjectClassValue())) {
+				// La foto solo se lee si MidPoint la pide EXPLICITAMENTE via
+				// attributesToGet. Nunca un SELECT de blob por fila en busquedas masivas.
+				boolean fetchPhoto = isPhotoRequested(options);
 				if (filter != null && filter.getByUid() != null) {
 					JSONObject patronJson = patronService.getPatron(filter.getByUid());
 					if (patronJson != null && patronJson.length() > 0) { // Check if patronJson is not null or empty
-						handler.handle(patronMapper.convertJsonToPatronObject(patronJson));
+						ConnectorObject co = patronMapper.convertJsonToPatronObject(patronJson);
+						co = enrichWithPhoto(co, fetchPhoto);
+						if (co != null) handler.handle(co);
 						LOG.info("Resultados de búsqueda por UID para {0}: 1", oClass);
 					} else {
 						LOG.info("Resultados de búsqueda por UID para {0}: 0 (Patrón no encontrado o vacío)", oClass);
@@ -232,6 +302,7 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 				} else {
 					patronService.searchPatrons(filter, options, patronJson -> {
 						ConnectorObject co = patronMapper.convertJsonToPatronObject(patronJson);
+						co = enrichWithPhoto(co, fetchPhoto);
 						return co == null || handler.handle(co);
 					});
 				}
@@ -287,9 +358,25 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 			}
 			LOG.ok("Paso 1/2: Obtención y validación básica del esquema exitosa.");
 
-			// Paso 2: Probar conectividad (single GET, sin paginación)
-			LOG.ok("Paso 2/2: Probando conectividad...");
+			// Paso 2: Probar conectividad REST (single GET, sin paginación)
+			LOG.ok("Paso 2/3: Probando conectividad REST...");
 			patronService.testConnection();
+
+			// Paso 3: Probar el canal JDBC SI fue configurado.
+			// La degradacion elegante aplica solo a CRUD, NO a Test Connection:
+			// si el operador habilito JDBC, debe saber si funciona.
+			if (this.configuration.getDbEnabled()) {
+				LOG.ok("Paso 3/3: Probando el canal JDBC (foto de patron)...");
+				if (this.patronImageService == null) {
+					throw new ConnectorIOException("El canal JDBC esta habilitado (dbEnabled=true) "
+							+ "pero no se pudo inicializar durante init(). Revise host, credenciales "
+							+ "y conectividad con la base de datos de Koha.");
+				}
+				this.patronImageService.testConnection();
+				LOG.ok("Paso 3/3: Canal JDBC operativo.");
+			} else {
+				LOG.ok("Paso 3/3: Canal JDBC deshabilitado, se omite la prueba.");
+			}
 
 			LOG.ok("Prueba de conexión y configuración básica completada con éxito.");
 
@@ -359,6 +446,142 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 		builder.setCreateable(!meta.isNotCreatable());
 		builder.setUpdateable(!meta.isNotUpdateable());
 		builder.setReadable(!meta.isNotReadable());
+		if (meta.isNotReturnedByDefault()) {
+			builder.setReturnedByDefault(false);
+		}
+		return builder.build();
+	}
+
+	// --- Helpers del canal JDBC (foto del patron) ---
+
+	/**
+	 * Procesa los atributos de foto ({@code photo} / {@code photo_mimetype})
+	 * para una operacion de create o update sobre un patron.
+	 *
+	 * <p>Reglas:</p>
+	 * <ul>
+	 *   <li>Si el canal JDBC no esta operativo, no hace nada (degradacion elegante del CRUD).</li>
+	 *   <li>Si el atributo {@code photo} NO viene en el conjunto de atributos: NO-OP.</li>
+	 *   <li>Si {@code photo} viene con valor: upsert idempotente a la tabla {@code patronimage}.</li>
+	 *   <li>Si {@code photo} viene con valor null o vacio: <strong>NO-OP</strong>.
+	 *       JAMAS se borra {@code patronimage} cuando la foto llega null; la ausencia
+	 *       de valor se interpreta como "sin cambios", no como "borrar".</li>
+	 * </ul>
+	 *
+	 * @param borrowernumber clave del patron (= patron_id = __UID__)
+	 * @param attrs          atributos de la operacion
+	 */
+	private void applyPhotoFromAttributes(String borrowernumber, Set<Attribute> attrs) {
+		if (attrs == null) {
+			return;
+		}
+		Attribute photoAttr = AttributeUtil.find(PatronMapper.ATTR_PHOTO, attrs);
+		if (photoAttr == null) {
+			// El atributo no fue enviado: NO-OP.
+			return;
+		}
+		if (patronImageService == null) {
+			// JDBC no operativo: degradacion elegante del CRUD.
+			LOG.warn("Se recibio el atributo '{0}' para el patron {1} pero el canal JDBC "
+					+ "no esta operativo. La foto NO se provisiono.",
+					PatronMapper.ATTR_PHOTO, borrowernumber);
+			return;
+		}
+
+		byte[] photoBytes = extractPhotoBytes(photoAttr);
+		if (photoBytes == null || photoBytes.length == 0) {
+			// photo presente pero null/vacio: NO-OP. NUNCA borrar aqui.
+			LOG.ok("Atributo '{0}' presente con valor null/vacio para el patron {1}: NO-OP "
+					+ "(la foto existente no se modifica ni se borra).",
+					PatronMapper.ATTR_PHOTO, borrowernumber);
+			return;
+		}
+
+		Attribute mimeAttr = AttributeUtil.find(PatronMapper.ATTR_PHOTO_MIMETYPE, attrs);
+		String mimetype = (mimeAttr != null) ? AttributeUtil.getStringValue(mimeAttr) : null;
+		if (StringUtil.isBlank(mimetype)) {
+			// Inferir un default razonable; PatronImageService validara que sea permitido.
+			mimetype = "image/jpeg";
+			LOG.ok("No se especifico '{0}' para el patron {1}; se asume {2}.",
+					PatronMapper.ATTR_PHOTO_MIMETYPE, borrowernumber, mimetype);
+		}
+
+		LOG.ok("Provisionando foto del patron {0} via JDBC ({1} bytes, mimetype={2}).",
+				borrowernumber, photoBytes.length, mimetype);
+		patronImageService.upsertImage(borrowernumber, photoBytes, mimetype);
+	}
+
+	/**
+	 * Extrae los bytes de la foto de un atributo ConnId. Soporta valores de
+	 * tipo {@code byte[]}.
+	 *
+	 * @param photoAttr atributo de foto (no nulo)
+	 * @return los bytes, o {@code null} si el atributo no tiene valor
+	 */
+	private byte[] extractPhotoBytes(Attribute photoAttr) {
+		java.util.List<Object> values = photoAttr.getValue();
+		if (values == null || values.isEmpty() || values.get(0) == null) {
+			return null;
+		}
+		Object value = values.get(0);
+		if (value instanceof byte[]) {
+			return (byte[]) value;
+		}
+		throw new org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException(
+				"El atributo '" + PatronMapper.ATTR_PHOTO + "' debe ser de tipo byte[]. "
+				+ "Tipo recibido: " + value.getClass().getName());
+	}
+
+	/**
+	 * Determina si MidPoint solicito explicitamente el atributo {@code photo}
+	 * en {@code OperationOptions.getAttributesToGet()}.
+	 *
+	 * @param options opciones de la operacion
+	 * @return true si la foto fue solicitada de forma explicita
+	 */
+	private boolean isPhotoRequested(OperationOptions options) {
+		if (options == null || options.getAttributesToGet() == null) {
+			return false;
+		}
+		for (String attr : options.getAttributesToGet()) {
+			if (PatronMapper.ATTR_PHOTO.equals(attr)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Si se solicito la foto y el canal JDBC esta operativo, lee la imagen de
+	 * la tabla {@code patronimage} y la agrega al {@link ConnectorObject}.
+	 *
+	 * <p>Degradacion elegante: si el JDBC no esta operativo o el patron no tiene
+	 * foto, el objeto se devuelve sin el atributo {@code photo}.</p>
+	 *
+	 * @param co         objeto del patron (puede ser null)
+	 * @param fetchPhoto true si se debe leer la foto
+	 * @return el objeto, enriquecido con la foto si corresponde
+	 */
+	private ConnectorObject enrichWithPhoto(ConnectorObject co, boolean fetchPhoto) {
+		if (co == null || !fetchPhoto) {
+			return co;
+		}
+		if (patronImageService == null) {
+			LOG.warn("Se solicito la foto del patron {0} pero el canal JDBC no esta operativo.",
+					co.getUid() != null ? co.getUid().getUidValue() : "?");
+			return co;
+		}
+		String borrowernumber = co.getUid().getUidValue();
+		byte[] photo = patronImageService.getImage(borrowernumber);
+		if (photo == null || photo.length == 0) {
+			return co;
+		}
+		// ConnId 1.5.2.0 no tiene constructor de copia en ConnectorObjectBuilder:
+		// se reconstruye el objeto con sus atributos y se anade la foto.
+		ConnectorObjectBuilder builder = new ConnectorObjectBuilder();
+		builder.setObjectClass(co.getObjectClass());
+		builder.addAttributes(co.getAttributes());
+		builder.addAttribute(AttributeBuilder.build(PatronMapper.ATTR_PHOTO, photo));
 		return builder.build();
 	}
 }

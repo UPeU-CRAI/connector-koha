@@ -35,6 +35,19 @@ public class PatronMapper extends BaseMapper {
     public static final String KOHA_PATRON_ID_NATIVE_NAME = "patron_id";
     public static final Map<String, AttributeMetadata> ATTRIBUTE_METADATA_MAP = new LinkedHashMap<>();
 
+    /**
+     * Atributo ConnId con los bytes de la foto del patron.
+     * Se provisiona via canal JDBC a la tabla {@code patronimage} de Koha,
+     * NUNCA via la API REST (Koha 25.11 no tiene endpoint de imagen).
+     */
+    public static final String ATTR_PHOTO = "photo";
+
+    /**
+     * Atributo ConnId con el mimetype de la foto del patron.
+     * Acompana a {@link #ATTR_PHOTO} en el canal JDBC.
+     */
+    public static final String ATTR_PHOTO_MIMETYPE = "photo_mimetype";
+
     static {
         final String ATTR_USERID = "userid";
         final String ATTR_CARDNUMBER = "cardnumber";
@@ -138,6 +151,16 @@ public class PatronMapper extends BaseMapper {
         ATTRIBUTE_METADATA_MAP.put("altaddress_country", new AttributeMetadata("altaddress_country", "altaddress_country", String.class));
         ATTRIBUTE_METADATA_MAP.put("altaddress_email", new AttributeMetadata("altaddress_email", "altaddress_email", String.class));
         ATTRIBUTE_METADATA_MAP.put("altaddress_phone", new AttributeMetadata("altaddress_phone", "altaddress_phone", String.class));
+
+        // --- Foto del patron (canal JDBC, NO REST) ---
+        // returnedByDefault=false: la foto solo se lee si MidPoint la pide
+        // explicitamente; nunca se hace un SELECT de blob por fila en busquedas masivas.
+        // Estos dos atributos se EXCLUYEN del payload JSON REST en buildPatronJson()
+        // y se procesan en una rama JDBC dedicada del conector.
+        ATTRIBUTE_METADATA_MAP.put(ATTR_PHOTO,
+                new AttributeMetadata(ATTR_PHOTO, "photo", byte[].class, AttributeMetadata.Flags.NOT_RETURNED_BY_DEFAULT));
+        ATTRIBUTE_METADATA_MAP.put(ATTR_PHOTO_MIMETYPE,
+                new AttributeMetadata(ATTR_PHOTO_MIMETYPE, "photo_mimetype", String.class, AttributeMetadata.Flags.NOT_RETURNED_BY_DEFAULT));
     }
 
     /**
@@ -153,6 +176,13 @@ public class PatronMapper extends BaseMapper {
             String connIdAttrName = attr.getName();
             if (Uid.NAME.equals(connIdAttrName)) {
                 LOG.ok("Skipping Uid.NAME attribute");
+                continue;
+            }
+
+            // La foto del patron NO viaja por REST: se provisiona via canal JDBC
+            // (tabla patronimage). El conector la procesa en una rama dedicada.
+            if (ATTR_PHOTO.equals(connIdAttrName) || ATTR_PHOTO_MIMETYPE.equals(connIdAttrName)) {
+                LOG.ok("Excluyendo del payload REST el atributo de foto '{0}' (se maneja via JDBC).", connIdAttrName);
                 continue;
             }
 
@@ -244,6 +274,12 @@ public class PatronMapper extends BaseMapper {
         for (AttributeMetadata meta : ATTRIBUTE_METADATA_MAP.values()) {
             // Omitir el que ya se usó para Name.NAME si su ConnIdName es "userid"
             if ("userid".equals(meta.getConnIdName())) {
+                continue;
+            }
+
+            // La foto del patron no proviene del JSON REST; la lee el conector
+            // via canal JDBC solo cuando MidPoint la solicita explicitamente.
+            if (ATTR_PHOTO.equals(meta.getConnIdName()) || ATTR_PHOTO_MIMETYPE.equals(meta.getConnIdName())) {
                 continue;
             }
 

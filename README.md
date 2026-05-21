@@ -1,11 +1,12 @@
 # Conector de Koha para MidPoint
 
-Conector de identidades para **Evolveum MidPoint** que gestiona el ciclo de vida de usuarios (Patrones) y grupos (Categorías de Patrones) en el **Sistema Integrado de Gestión de Bibliotecas (ILS) Koha**. Utiliza la API REST de Koha y está desarrollado siguiendo las mejores prácticas del Identity Connector Framework (ConnId).
+Conector de identidades para **Evolveum MidPoint** que gestiona el ciclo de vida de usuarios (Patrones) y grupos (Categorías de Patrones) en el **Sistema Integrado de Gestión de Bibliotecas (ILS) Koha**. Es un conector **híbrido**: usa la API REST de Koha para los atributos del patrón y un **canal JDBC opcional** para provisionar la foto del patrón (la API REST de Koha no expone un endpoint de imagen). Está desarrollado siguiendo las mejores prácticas del Identity Connector Framework (ConnId).
 
-**Versión 1.2.0** — Requiere **Koha 25.11+** (usa PATCH para actualizaciones de patrones).
+**Versión 1.3.0** — Requiere **Koha 25.11+** (usa PATCH para actualizaciones de patrones).
 
 ## ✨ Características Principales
 * **Gestión completa de Patrones y Categorías**: Operaciones de `Create`, `Search`, `Update` y `Delete` para cuentas y grupos.
+* **Canal JDBC para la foto del patrón**: Provisiona la imagen del patrón directamente en la tabla `patronimage` de la base de datos de Koha, ya que la API REST no tiene endpoint de imagen. El canal es opcional (`dbEnabled`) y el conector sigue operativo en modo REST si se deshabilita o si la base de datos no está disponible.
 * **Arquitectura moderna y desacoplada**: El conector implementa directamente las interfaces de ConnId sin depender de clases base abstractas, lo que resulta en un código más robusto, mantenible y fácil de probar.
 * **Autenticación flexible**: Soporte nativo para autenticación **Básica** (usuario/contraseña) y **OAuth2** (Client Credentials).
 * **Búsqueda por atributos**: Permite buscar usuarios por UID, `userid`, `email` y `cardnumber` directamente desde MidPoint.
@@ -16,14 +17,15 @@ Conector de identidades para **Evolveum MidPoint** que gestiona el ciclo de vida
 * **Categorías de solo lectura**: Las categorías reflejan el comportamiento real de la API de Koha.
 
 ## 📋 Requisitos Previos
-* **Java** Development Kit (JDK) **8**, **11** o **17** (LTS).
+* **Java** Development Kit (JDK) **8** (lo exige `connector-parent` 1.5.2.0).
 * **Apache Maven** 3.6.3 o superior para compilar desde la fuente.
+* **Koha 25.11+** y, si se usa el canal JDBC para la foto, acceso de red a la base de datos MariaDB de Koha.
 
 ## 🚀 Instalación
-1.  **Descargar el conector**: Visita la sección [Releases](https://github.com/UPeU-CRAI/connector-koha/releases) y descarga el archivo `.jar` más reciente (p. ej., `connector-koha-1.2.0.jar`).
+1.  **Descargar el conector**: Visita la sección [Releases](https://github.com/UPeU-Infra/connector-koha/releases) y descarga el archivo `.jar` más reciente (p. ej., `connector-koha-1.3.0.jar`).
 2.  **Desplegar en MidPoint**: Copia el `.jar` en el directorio de conectores de tu instancia de MidPoint.
     ```bash
-    cp connector-koha-1.2.0.jar $MIDPOINT_HOME/var/icf-connectors/
+    cp connector-koha-1.3.0.jar $MIDPOINT_HOME/var/icf-connectors/
     ```
 3.  **Reiniciar MidPoint** para que detecte y cargue el nuevo conector.
 
@@ -52,15 +54,66 @@ Al crear un nuevo recurso en MidPoint, el fragmento de `connectorConfiguration` 
 </connectorConfiguration>
 ```
 
+## 🖼️ Canal JDBC para la foto del patrón
+
+La API REST de Koha 25.11 **no tiene endpoint para la imagen del patrón**. Para provisionar la foto, el conector abre un canal JDBC directo a la base de datos MariaDB de Koha y escribe en la tabla `patronimage`.
+
+### Diseño
+
+* El canal JDBC es **opcional**: se activa con `dbEnabled=true`. Con `dbEnabled=false` (valor por defecto) el conector funciona exactamente como antes, solo REST.
+* **Degradación elegante**: si la base de datos no está disponible al iniciar, el conector registra un *warning* y sigue operativo en modo REST. Las operaciones CRUD no fallan por la foto; solo la operación **Test Connection** falla si `dbEnabled=true` y el canal JDBC no funciona (para que el operador sepa que su configuración no es válida).
+* La clave de la foto es siempre el `borrowernumber` de Koha (= `patron_id` = `__UID__` de ConnId).
+* Atributo `photo` (`byte[]`) con valor `null` → **no se hace nada**. La foto solo se borra ante una operación de borrado explícita de valor; nunca se interpreta `null` como "borrar".
+* La foto solo se lee en búsquedas si MidPoint la pide explícitamente vía `attributesToGet` (atributo `returnedByDefault=false`); nunca se hace un `SELECT` de blob por fila en búsquedas masivas.
+* Mimetypes permitidos: `image/jpeg`, `image/png`. Tamaño máximo del blob: 5 MB.
+* Usa el pool nativo `MariaDbPoolDataSource` del driver MariaDB (no HikariCP, por conflictos con el classloader aislado de ConnId).
+
+### Configuración JDBC
+
+```xml
+<connectorConfiguration>
+    <icfc:configurationProperties ...>
+
+        <!-- ... configuración REST ... -->
+
+        <cfg:dbEnabled>true</cfg:dbEnabled>
+        <cfg:dbHost>192.168.12.130</cfg:dbHost>
+        <cfg:dbPort>3306</cfg:dbPort>
+        <cfg:dbName>koha_bul</cfg:dbName>
+        <cfg:dbUser>TU_USUARIO_DB</cfg:dbUser>
+        <cfg:dbPassword>
+            <t:clearValue>TU_PASSWORD_DB</t:clearValue>
+        </cfg:dbPassword>
+        <cfg:dbPoolSize>2</cfg:dbPoolSize>
+
+    </icfc:configurationProperties>
+</connectorConfiguration>
+```
+
+| Propiedad | Tipo | Default | Descripción |
+|---|---|---|---|
+| `dbEnabled` | boolean | `false` | Habilita el canal JDBC para la foto |
+| `dbHost` | String | — | Host del servidor MariaDB de Koha |
+| `dbPort` | int | `3306` | Puerto MariaDB |
+| `dbName` | String | — | Nombre del esquema de Koha (ej. `koha_bul`) |
+| `dbUser` | String | — | Usuario MariaDB con permisos sobre `patronimage` |
+| `dbPassword` | GuardedString | — | Contraseña del usuario MariaDB |
+| `dbPoolSize` | int | `2` | Tamaño máximo del pool de conexiones JDBC |
+
+Para usar la foto, mapea en MidPoint un atributo de tipo `byte[]` al atributo `photo` del conector, y opcionalmente un `String` al atributo `photo_mimetype`.
+
 ## 🏛️ Arquitectura del Conector
 
-* **KohaConnector.java**: Orquestador principal del conector. Implementa directamente las interfaces de ConnId (Connector, CreateOp, SearchOp, etc.) y coordina la lógica de negocio.
+* **KohaConnector.java**: Orquestador principal del conector. Implementa directamente las interfaces de ConnId (Connector, CreateOp, SearchOp, etc.) y coordina la lógica de negocio, incluyendo las ramas del canal JDBC para la foto.
 
-* **KohaConfiguration.java**: Clase de configuración autocontenida que define las propiedades del conector visibles en MidPoint. Implementa `org.identityconnectors.framework.spi.Configuration`.
+* **KohaConfiguration.java**: Clase de configuración autocontenida que define las propiedades del conector visibles en MidPoint (REST y JDBC). Implementa `org.identityconnectors.framework.spi.Configuration`.
 
 * **KohaAuthenticator.java**: Centraliza la lógica para crear un cliente HTTP pre-autenticado, ya sea con Basic Auth o un token de OAuth2.
 
-* **Paquete `services`**: Contiene las clases (`PatronService`, `CategoryService`) que se comunican con los endpoints de la API REST de Koha.
+* **Paquete `services`**: Contiene las clases que se comunican con los sistemas externos:
+  * `PatronService`, `CategoryService` — endpoints de la API REST de Koha.
+  * `JdbcConnectionProvider` — gestiona el pool de conexiones JDBC (`MariaDbPoolDataSource`).
+  * `PatronImageService` — operaciones JDBC sobre la tabla `patronimage` (upsert, delete, get, test).
 
 * **Paquete `mappers`**: Incluye los transformadores (`PatronMapper`, `CategoryMapper`) que convierten los datos entre el formato de ConnId y el JSON de Koha.
 
@@ -103,6 +156,15 @@ TRACE: Máximo nivel de detalle, incluyendo los payloads de las peticiones y res
 Revisa los logs de MidPoint para ver los mensajes emitidos por el conector.
 
 ## 📜 Changelog
+
+### v1.3.0 (2026-05-21)
+- **Feature**: Canal JDBC opcional para provisionar la foto del patrón en la tabla `patronimage` de Koha (la API REST de Koha 25.11 no tiene endpoint de imagen). Conector híbrido: REST conserva los ~48 atributos del patrón intactos, JDBC solo para la foto. Un único JAR.
+- **Feature**: Nuevos atributos de patrón `photo` (`byte[]`) y `photo_mimetype` (`String`), ambos `returnedByDefault=false` y excluidos del payload JSON REST.
+- **Feature**: 7 nuevas propiedades de configuración para el canal JDBC: `dbEnabled`, `dbHost`, `dbPort`, `dbName`, `dbUser`, `dbPassword`, `dbPoolSize`.
+- **Feature**: Degradación elegante — si la base de datos no está disponible, el CRUD sigue operativo en modo REST; solo `Test Connection` falla cuando `dbEnabled=true`.
+- **Feature**: Clases nuevas `JdbcConnectionProvider` (pool nativo `MariaDbPoolDataSource`) y `PatronImageService` (upsert idempotente con `ON DUPLICATE KEY UPDATE`, delete, get, test).
+- **Change**: Nueva dependencia MariaDB Connector/J 3.5.3, empaquetada en el JAR del conector.
+- **Tests**: Suite de pruebas para el canal JDBC con mocks y con MariaDB real (Testcontainers o base de datos externa).
 
 ### v1.2.2 (2026-05-21)
 - **Fix**: Fallback search by cardnumber when userid lookup returns empty results (PatronService.java)

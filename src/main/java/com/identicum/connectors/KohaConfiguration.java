@@ -24,6 +24,21 @@ public class KohaConfiguration implements Configuration {
     private GuardedString clientSecret;
     private int pageSize = 100;
 
+    // --- Canal JDBC (provisioning de patronimage) ---
+    /**
+     * If true, the connector opens a direct JDBC channel to the Koha database
+     * to provision patron photos into the {@code patronimage} table.
+     * The Koha REST API has no endpoint for patron images, hence this hybrid design.
+     * Default is false (REST-only behaviour, fully backwards compatible).
+     */
+    private boolean dbEnabled = false;
+    private String dbHost;
+    private int dbPort = 3306;
+    private String dbName;
+    private String dbUser;
+    private GuardedString dbPassword;
+    private int dbPoolSize = 2;
+
     // Campo para almacenar los mensajes del conector inyectados por el framework
     private ConnectorMessages connectorMessages;
 
@@ -121,6 +136,86 @@ public class KohaConfiguration implements Configuration {
         this.pageSize = pageSize;
     }
 
+    // --- Propiedades del canal JDBC ---
+
+    @ConfigurationProperty(order = 50,
+            displayMessageKey = "koha.config.dbEnabled.display",
+            helpMessageKey = "koha.config.dbEnabled.help")
+    public boolean getDbEnabled() {
+        return dbEnabled;
+    }
+
+    public void setDbEnabled(boolean dbEnabled) {
+        this.dbEnabled = dbEnabled;
+    }
+
+    @ConfigurationProperty(order = 51,
+            displayMessageKey = "koha.config.dbHost.display",
+            helpMessageKey = "koha.config.dbHost.help")
+    public String getDbHost() {
+        return dbHost;
+    }
+
+    public void setDbHost(String dbHost) {
+        this.dbHost = dbHost;
+    }
+
+    @ConfigurationProperty(order = 52,
+            displayMessageKey = "koha.config.dbPort.display",
+            helpMessageKey = "koha.config.dbPort.help")
+    public int getDbPort() {
+        return dbPort;
+    }
+
+    public void setDbPort(int dbPort) {
+        this.dbPort = dbPort;
+    }
+
+    @ConfigurationProperty(order = 53,
+            displayMessageKey = "koha.config.dbName.display",
+            helpMessageKey = "koha.config.dbName.help")
+    public String getDbName() {
+        return dbName;
+    }
+
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
+    @ConfigurationProperty(order = 54,
+            displayMessageKey = "koha.config.dbUser.display",
+            helpMessageKey = "koha.config.dbUser.help")
+    public String getDbUser() {
+        return dbUser;
+    }
+
+    public void setDbUser(String dbUser) {
+        this.dbUser = dbUser;
+    }
+
+    @ConfigurationProperty(order = 55,
+            confidential = true,
+            displayMessageKey = "koha.config.dbPassword.display",
+            helpMessageKey = "koha.config.dbPassword.help")
+    public GuardedString getDbPassword() {
+        return dbPassword;
+    }
+
+    public void setDbPassword(GuardedString dbPassword) {
+        this.dbPassword = dbPassword;
+    }
+
+    @ConfigurationProperty(order = 56,
+            displayMessageKey = "koha.config.dbPoolSize.display",
+            helpMessageKey = "koha.config.dbPoolSize.help")
+    public int getDbPoolSize() {
+        return dbPoolSize;
+    }
+
+    public void setDbPoolSize(int dbPoolSize) {
+        this.dbPoolSize = dbPoolSize;
+    }
+
     /**
      * Valida que la configuración proporcionada sea coherente y completa.
      */
@@ -145,6 +240,28 @@ public class KohaConfiguration implements Configuration {
             }
         } else {
             throw new IllegalArgumentException("El valor de authenticationMethodStrategy no es reconocido: '" + authenticationMethodStrategy + "'. Valores válidos: BASIC, OAUTH2.");
+        }
+
+        // --- Validación del canal JDBC ---
+        if (dbEnabled) {
+            if (dbHost == null || dbHost.trim().isEmpty()) {
+                throw new IllegalArgumentException("El host de la base de datos (dbHost) es requerido cuando dbEnabled=true.");
+            }
+            if (dbName == null || dbName.trim().isEmpty()) {
+                throw new IllegalArgumentException("El nombre de la base de datos (dbName) es requerido cuando dbEnabled=true.");
+            }
+            if (dbUser == null || dbUser.trim().isEmpty()) {
+                throw new IllegalArgumentException("El usuario de la base de datos (dbUser) es requerido cuando dbEnabled=true.");
+            }
+            if (dbPassword == null) {
+                throw new IllegalArgumentException("La contrasena de la base de datos (dbPassword) es requerida cuando dbEnabled=true.");
+            }
+            if (dbPort < 1 || dbPort > 65535) {
+                throw new IllegalArgumentException("El puerto de la base de datos (dbPort) debe estar entre 1 y 65535. Valor actual: " + dbPort);
+            }
+            if (dbPoolSize < 1) {
+                throw new IllegalArgumentException("El tamano del pool JDBC (dbPoolSize) debe ser >= 1. Valor actual: " + dbPoolSize);
+            }
         }
     }
 

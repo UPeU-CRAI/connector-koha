@@ -22,7 +22,14 @@ public class AttributeMetadata {
         NOT_CREATABLE,
         NOT_UPDATEABLE,
         NOT_READABLE,
-        MULTIVALUED
+        MULTIVALUED,
+        /**
+         * El atributo no se devuelve por defecto en las busquedas:
+         * solo se incluye si MidPoint lo pide explicitamente via
+         * {@code OperationOptions.getAttributesToGet()}.
+         * Util para atributos costosos como blobs (p. ej. la foto del patron).
+         */
+        NOT_RETURNED_BY_DEFAULT
     }
 
     public AttributeMetadata(String connIdName, String kohaNativeName, Class<?> type, Flags... flags) {
@@ -66,5 +73,9 @@ public class AttributeMetadata {
 
     public boolean isMultivalued() {
         return this.flags.contains(Flags.MULTIVALUED);
+    }
+
+    public boolean isNotReturnedByDefault() {
+        return this.flags.contains(Flags.NOT_RETURNED_BY_DEFAULT);
     }
 }

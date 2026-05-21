@@ -218,4 +218,37 @@ public class PatronMapperTest {
         assertNull(co.getAttributeByName("date_of_birth"), "date_of_birth con formato inválido debe ser null.");
         assertNull(co.getAttributeByName("expiry_date"), "expiry_date con formato inválido debe ser null.");
     }
+
+    @Test
+    void testBuildPatronJson_ExcludesPhotoAttributesFromRestPayload() {
+        // photo y photo_mimetype se provisionan via JDBC, nunca via REST.
+        Set<Attribute> attrs = buildSampleAttributesForCreate();
+        attrs.add(AttributeBuilder.build(PatronMapper.ATTR_PHOTO, new byte[]{1, 2, 3, 4}));
+        attrs.add(AttributeBuilder.build(PatronMapper.ATTR_PHOTO_MIMETYPE, "image/jpeg"));
+
+        JSONObject json = patronMapper.buildPatronJson(attrs, true);
+
+        assertFalse(json.has("photo"),
+                "El payload REST NUNCA debe incluir 'photo'.");
+        assertFalse(json.has("photo_mimetype"),
+                "El payload REST NUNCA debe incluir 'photo_mimetype'.");
+        // El resto de atributos del patron si deben estar presentes.
+        assertTrue(json.has("userid"), "El payload REST debe conservar 'userid'.");
+        assertTrue(json.has("cardnumber"), "El payload REST debe conservar 'cardnumber'.");
+    }
+
+    @Test
+    void testPhotoAttributesRegisteredInSchemaMetadata() {
+        AttributeMetadata photoMeta = PatronMapper.ATTRIBUTE_METADATA_MAP.get(PatronMapper.ATTR_PHOTO);
+        AttributeMetadata mimeMeta = PatronMapper.ATTRIBUTE_METADATA_MAP.get(PatronMapper.ATTR_PHOTO_MIMETYPE);
+
+        assertNotNull(photoMeta, "El atributo 'photo' debe estar registrado.");
+        assertNotNull(mimeMeta, "El atributo 'photo_mimetype' debe estar registrado.");
+        assertEquals(byte[].class, photoMeta.getType(), "'photo' debe ser de tipo byte[].");
+        assertEquals(String.class, mimeMeta.getType(), "'photo_mimetype' debe ser de tipo String.");
+        assertTrue(photoMeta.isNotReturnedByDefault(),
+                "'photo' debe tener returnedByDefault=false.");
+        assertTrue(mimeMeta.isNotReturnedByDefault(),
+                "'photo_mimetype' debe tener returnedByDefault=false.");
+    }
 }
