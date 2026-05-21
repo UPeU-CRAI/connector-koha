@@ -83,9 +83,35 @@ public class PatronService extends AbstractKohaService {
 
     public void searchPatrons(KohaFilter filter, OperationOptions opts, Predicate<JSONObject> consumer) throws ConnectorException, IOException {
         int pageSize = (opts != null && opts.getPageSize() != null) ? opts.getPageSize() : configuration.getPageSize();
+
+        // Determinar si aplica fallback cardnumber:
+        // Solo cuando se busca por __NAME__ (userid) con match exacto y sin otros criterios de filtrado.
+        boolean useCardnumberFallback = filter != null
+                && StringUtil.isNotBlank(filter.getByName())
+                && filter.getByCardNumber() == null
+                && StringUtil.isBlank(filter.getByEmail())
+                && StringUtil.isBlank(filter.getByCategoryId())
+                && StringUtil.isBlank(filter.getByLibraryId())
+                && (filter.getMatchType() == null || "exact".equals(filter.getMatchType()));
+
+        long delivered = executePagedSearch(filter, pageSize, consumer);
+
+        if (delivered == 0 && useCardnumberFallback) {
+            LOG.info("PATRON_SEARCH: userid={0} no encontrado. Reintentando con cardnumber={0}.", filter.getByName());
+            KohaFilter fallbackFilter = new KohaFilter();
+            fallbackFilter.setByCardNumber(filter.getByName());
+            executePagedSearch(fallbackFilter, pageSize, consumer);
+        }
+    }
+
+    /**
+     * Ejecuta la búsqueda paginada aplicando los criterios del filtro dado.
+     * Retorna el número total de patrones entregados al consumer.
+     */
+    private long executePagedSearch(KohaFilter filter, int pageSize, Predicate<JSONObject> consumer) throws ConnectorException, IOException {
         int currentPage = 1;
         int pageCount = 0;
-        int totalDelivered = 0;
+        long totalDelivered = 0;
         final int MAX_PAGES = 1000;
         boolean moreResults;
         String fullUrl;
@@ -163,5 +189,7 @@ public class PatronService extends AbstractKohaService {
             if (moreResults) currentPage++;
 
         } while (moreResults);
+
+        return totalDelivered;
     }
 }
