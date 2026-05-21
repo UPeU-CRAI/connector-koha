@@ -104,6 +104,12 @@ Revisa los logs de MidPoint para ver los mensajes emitidos por el conector.
 
 ## 📜 Changelog
 
+### v1.2.2 (2026-05-21)
+- **Fix**: Fallback search by cardnumber when userid lookup returns empty results (PatronService.java)
+
+### v1.2.1
+- Version bump (superseded by 1.2.2)
+
 ### v1.2.0 (2026-04-16)
 - **BREAKING**: Requiere Koha 25.11+ (usa PATCH para actualizaciones de patrones)
 - **Feature**: Atributo operacional `__ENABLE__` para ciclo de vida de MidPoint (mecanismo dual: patron_card_lost + expiry_date)
