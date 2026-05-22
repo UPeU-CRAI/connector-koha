@@ -9,6 +9,7 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPatch;
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.logging.Log;
+import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.objects.OperationOptions;
 import org.json.JSONArray;
@@ -57,9 +58,69 @@ public class PatronService extends AbstractKohaService {
         }
     }
 
+    /**
+     * Crea un patron en Koha. Si Koha devuelve 409 Conflict con el mensaje
+     * "already exists", busca el patron existente por cardnumber y devuelve
+     * su JSONObject, haciendo la operacion idempotente.
+     *
+     * Esto resuelve el caso de shadow muerta/perdida en MidPoint: en lugar de
+     * fallar el recompute, el conector devuelve el UID del patron existente
+     * para que MidPoint lo vincule correctamente.
+     */
     public JSONObject createPatron(JSONObject payload) throws ConnectorException, IOException {
         HttpPost request = new HttpPost(getBaseUrl());
-        return callRequestWithEntity(request, payload);
+        try {
+            return callRequestWithEntity(request, payload);
+        } catch (AlreadyExistsException e) {
+            // Koha devolvio 409 — puede ser shadow muerta. Intentar recuperar por cardnumber.
+            String cardnumber = payload.optString("cardnumber", null);
+            if (cardnumber == null || cardnumber.isEmpty()) {
+                LOG.warn("CREATE patron devolvio 409 pero el payload no contiene cardnumber. Relanzando excepcion original.");
+                throw e;
+            }
+            LOG.info("CREATE patron 409 conflict para cardnumber={0}. Buscando patron existente para recuperar UID.", cardnumber);
+            JSONObject existing = findPatronByCardnumber(cardnumber);
+            if (existing != null && existing.has("patron_id")) {
+                LOG.ok("Patron existente encontrado via cardnumber={0}, patron_id={1}. Devolviendo UID existente (operacion idempotente).",
+                        cardnumber, existing.get("patron_id"));
+                return existing;
+            }
+            LOG.warn("CREATE patron 409 para cardnumber={0} pero no se encontro patron existente en GET. Relanzando excepcion original.", cardnumber);
+            throw e;
+        }
+    }
+
+    /**
+     * Busca un patron por cardnumber. Devuelve el primer resultado o null si no existe.
+     */
+    private JSONObject findPatronByCardnumber(String cardnumber) throws ConnectorException, IOException {
+        String url = getBaseUrl() + "?cardnumber=" + urlEncodeUTF8(cardnumber) + "&_per_page=1&_page=1";
+        HttpGet request = new HttpGet(url);
+        request.setHeader("x-koha-embed", "extended_attributes");
+        String responseBody = callRequest(request);
+        if (responseBody == null || responseBody.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            String trimmed = responseBody.trim();
+            if (trimmed.startsWith("[")) {
+                org.json.JSONArray arr = new org.json.JSONArray(trimmed);
+                if (arr.length() > 0) {
+                    return arr.getJSONObject(0);
+                }
+                return null;
+            } else if (trimmed.startsWith("{")) {
+                JSONObject obj = new JSONObject(trimmed);
+                if (obj.has("patron_id")) {
+                    return obj;
+                }
+                return null;
+            }
+            return null;
+        } catch (org.json.JSONException je) {
+            LOG.warn("No se pudo parsear la respuesta al buscar patron por cardnumber={0}: {1}", cardnumber, responseBody);
+            return null;
+        }
     }
 
     public void updatePatron(String uid, JSONObject payload) throws ConnectorException, IOException {
