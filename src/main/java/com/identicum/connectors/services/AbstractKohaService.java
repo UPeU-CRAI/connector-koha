@@ -238,6 +238,14 @@ public abstract class AbstractKohaService {
             case 403:
                 throw new PermissionDeniedException("Permission denied for " + resourceContext + ". Request: " + requestDesc + ", Status: " + statusCode + ", Body: " + body);
             case 404:
+                // Si la respuesta es HTML (ej. Mojolicious "Page Not Found"), es un error de routing,
+                // NO un patron inexistente. Lanzar ConnectorIOException para evitar borrar la shadow en MidPoint.
+                org.apache.http.Header contentTypeHeader = response.getFirstHeader("Content-Type");
+                String contentType = (contentTypeHeader != null) ? contentTypeHeader.getValue() : "";
+                if (contentType.toLowerCase().contains("text/html")) {
+                    LOG.error("404 recibido con Content-Type HTML — error de routing Koha, no patron inexistente. Request: {0}", requestDesc);
+                    throw new ConnectorIOException(resourceContext + " routing error (404 HTML). Check Koha REST API configuration. Request: " + requestDesc + ", Body: " + body.substring(0, Math.min(body.length(), 200)));
+                }
                 String uidPart = "";
                 // Attempt to extract last part of path as potential UID/ID
                 String[] pathSegments = request.getURI().getPath().split("/");

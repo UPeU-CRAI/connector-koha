@@ -6,7 +6,7 @@ import com.identicum.connectors.services.HttpClientAdapter;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPatch;
+import org.apache.http.client.methods.HttpPut;
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
@@ -124,7 +124,7 @@ public class PatronService extends AbstractKohaService {
     }
 
     public void updatePatron(String uid, JSONObject payload) throws ConnectorException, IOException {
-        HttpPatch request = new HttpPatch(getBaseUrl() + "/" + uid);
+        HttpPut request = new HttpPut(getBaseUrl() + "/" + uid);
         callRequestWithEntity(request, payload);
     }
 
