@@ -226,6 +226,8 @@ public abstract class AbstractKohaService {
                 if (getResourceName().equalsIgnoreCase("patron") &&
                     (lowerBody.contains("patron already exists") || lowerBody.contains("cardnumber already exists"))) {
                     throw new AlreadyExistsException(resourceContext + " reported resource already exists. Request: " + requestDesc + ", Body: " + body);
+                } else if (getResourceName().equalsIgnoreCase("patron") && lowerBody.contains("problem with ")) {
+                    throw new AlreadyExistsException(resourceContext + " reported userid/cardnumber conflict (Problem with). Request: " + requestDesc + ", Body: " + body);
                 } else if (getResourceName().equalsIgnoreCase("category") &&
                            (lowerBody.contains("already exists") || lowerBody.contains("categorycode_exists") || lowerBody.contains("description_already_exists"))) {
                     throw new AlreadyExistsException(resourceContext + " reported resource already exists. Request: " + requestDesc + ", Body: " + body);
