@@ -144,10 +144,26 @@ public class PatronService extends AbstractKohaService {
         callRequestWithEntity(request, current);
     }
 
-    /** Campos que Koha calcula internamente y no acepta en PUT/POST. */
+    /**
+     * Campos que Koha calcula internamente y no acepta en PUT.
+     * Si un campo del GET se incluye en el PUT y es read-only, Koha devuelve 400.
+     * Lista expandida tras analizar respuestas 400 en PROD.
+     */
     private static final String[] READ_ONLY_PATRON_FIELDS = {
-        "patron_id", "checkouts_count", "overdues_count", "holds_count",
-        "account_balance", "extended_attributes", "anonymized"
+        "patron_id",            // PK, asignado por Koha
+        "anonymized",           // gestionado por procesos de privacidad
+        "expired",              // calculado: expiry_date < today
+        "restricted",           // calculado: debarred activo
+        "last_seen",            // auto-actualizado en login
+        "updated_on",           // timestamp auto-actualizado
+        "date_renewed",         // auto-actualizado en renovación
+        "extended_attributes",  // endpoint separado /extended_attributes
+        "overdrive_auth_token", // token externo, read-only
+        "primary_contact_method", // calculado
+        "checkouts_count",      // calculado
+        "overdues_count",       // calculado
+        "holds_count",          // calculado
+        "account_balance"       // calculado
     };
 
     /** GET basico de patron sin embed de extended_attributes (para uso interno en updatePatron). */
