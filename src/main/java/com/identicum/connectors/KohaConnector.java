@@ -13,6 +13,7 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.identityconnectors.common.logging.Log;
 import org.identityconnectors.common.StringUtil;
 import org.identityconnectors.common.security.GuardedString;
+import org.identityconnectors.framework.common.exceptions.AlreadyExistsException;
 import org.identityconnectors.framework.common.exceptions.ConfigurationException;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.exceptions.ConnectorIOException;
@@ -201,6 +202,29 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 			}
 			LOG.ok("Create para ObjectClass {0} completado. Uid: {1}", oClass, newUidValue);
 			return new Uid(newUidValue);
+		} catch (AlreadyExistsException e) {
+			// 3er fallback: el conflicto puede ser por el atributo extendido DNI (unique_id=1 en Koha).
+			// La búsqueda REST por cardnumber/userid no encuentra nada porque el patron existe con
+			// diferente cardnumber/userid pero el mismo DNI como extended_attribute.
+			if (ObjectClass.ACCOUNT.is(oClass.getObjectClassValue()) && jdbcConnectionProvider != null) {
+				try {
+					JSONObject tmpPayload = patronMapper.buildPatronJson(attrs, true);
+					String dniValue = tmpPayload.optString("userid", null);
+					if (StringUtil.isNotBlank(dniValue)) {
+						LOG.info("CREATE 409 — fallback JDBC por DNI extended_attribute={0}", dniValue);
+						String borrowerNo = findBorrowerByDniJdbc(dniValue);
+						if (borrowerNo != null) {
+							LOG.ok("CREATE 409 — Patron recuperado via JDBC DNI={0}, borrowernumber={1}. Idempotente.", dniValue, borrowerNo);
+							return new Uid(borrowerNo);
+						}
+						LOG.warn("CREATE 409 — JDBC DNI={0}: no encontrado en borrower_attributes. 409 irrecuperable.", dniValue);
+					}
+				} catch (Exception ex2) {
+					LOG.warn("CREATE 409 — JDBC DNI fallback lanzó excepcion: {0}", ex2.getMessage());
+				}
+			}
+			LOG.error(e, "Error AlreadyExistsException irrecuperable en Create para ObjectClass {0}", oClass.getObjectClassValue());
+			throw e;
 		} catch (ConnectorException e) { // Catch specific ConnectorExceptions first
 			LOG.error(e, "Error de ConnectorException en Create para ObjectClass {0}", oClass.getObjectClassValue());
 			throw e; // Re-throw original ConnectorException
@@ -573,6 +597,44 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 	 * @param fetchPhoto true si se debe leer la foto
 	 * @return el objeto, enriquecido con la foto si corresponde
 	 */
+	/**
+	 * Busca el borrowernumber de un patron en Koha por el atributo extendido DNI,
+	 * directamente en la BD via JDBC. El endpoint REST no expone búsqueda por
+	 * extended_attributes, pero la BD koha_bul.borrower_attributes sí.
+	 *
+	 * Se usa como 3er fallback en create() cuando Koha devuelve 409 y la búsqueda
+	 * REST por cardnumber y userid no encuentra el patron (conflicto por DNI único).
+	 *
+	 * @param dniValue valor del DNI a buscar (en MidPoint = userid = __NAME__ del patrón)
+	 * @return borrowernumber como String, o null si no encontrado o JDBC no disponible
+	 */
+	private String findBorrowerByDniJdbc(String dniValue) {
+		if (jdbcConnectionProvider == null || StringUtil.isBlank(dniValue)) {
+			return null;
+		}
+		java.sql.Connection conn = null;
+		java.sql.PreparedStatement ps = null;
+		java.sql.ResultSet rs = null;
+		try {
+			conn = jdbcConnectionProvider.getConnection();
+			ps = conn.prepareStatement(
+					"SELECT borrowernumber FROM borrower_attributes WHERE code='DNI' AND attribute=? LIMIT 1");
+			ps.setString(1, dniValue);
+			rs = ps.executeQuery();
+			if (rs.next()) {
+				return String.valueOf(rs.getInt("borrowernumber"));
+			}
+			return null;
+		} catch (Exception ex) {
+			LOG.warn("JDBC búsqueda por DNI={0} en borrower_attributes falló: {1}", dniValue, ex.getMessage());
+			return null;
+		} finally {
+			if (rs != null) try { rs.close(); } catch (Exception ignore) {}
+			if (ps != null) try { ps.close(); } catch (Exception ignore) {}
+			if (conn != null) try { conn.close(); } catch (Exception ignore) {}
+		}
+	}
+
 	private ConnectorObject enrichWithPhoto(ConnectorObject co, boolean fetchPhoto) {
 		if (co == null || !fetchPhoto) {
 			return co;
