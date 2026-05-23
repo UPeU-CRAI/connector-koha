@@ -123,9 +123,45 @@ public class PatronService extends AbstractKohaService {
         }
     }
 
+    /**
+     * Actualiza un patron en Koha via PUT (full-replace).
+     * La API Koha PUT requiere todos los campos obligatorios (library_id, surname, etc.)
+     * aunque solo haya cambiado un campo. Por eso hacemos GET primero, mergeamos
+     * el delta encima, y luego enviamos el objeto completo.
+     */
     public void updatePatron(String uid, JSONObject payload) throws ConnectorException, IOException {
+        // GET estado actual para construir body PUT completo
+        JSONObject current = getPatronBasic(uid);
+        // Overlay: los nuevos valores sobreescriben los actuales
+        for (String key : payload.keySet()) {
+            current.put(key, payload.get(key));
+        }
+        // Eliminar campos de solo-lectura que Koha rechazaria en el PUT
+        for (String readOnly : READ_ONLY_PATRON_FIELDS) {
+            current.remove(readOnly);
+        }
         HttpPut request = new HttpPut(getBaseUrl() + "/" + uid);
-        callRequestWithEntity(request, payload);
+        callRequestWithEntity(request, current);
+    }
+
+    /** Campos que Koha calcula internamente y no acepta en PUT/POST. */
+    private static final String[] READ_ONLY_PATRON_FIELDS = {
+        "patron_id", "checkouts_count", "overdues_count", "holds_count",
+        "account_balance", "extended_attributes", "anonymized"
+    };
+
+    /** GET basico de patron sin embed de extended_attributes (para uso interno en updatePatron). */
+    private JSONObject getPatronBasic(String uid) throws ConnectorException, IOException {
+        HttpGet request = new HttpGet(getBaseUrl() + "/" + uid);
+        String responseBody = callRequest(request);
+        try {
+            if (StringUtil.isBlank(responseBody)) {
+                return new JSONObject();
+            }
+            return new JSONObject(responseBody);
+        } catch (JSONException e) {
+            throw new ConnectorException("Error parseando patron UID " + uid + ": " + responseBody, e);
+        }
     }
 
     public void deletePatron(String uid) throws ConnectorException, IOException {
