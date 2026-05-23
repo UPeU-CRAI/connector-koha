@@ -230,8 +230,14 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 				} else {
 					LOG.ok("Update Uid {0}: sin cambios REST (solo atributos de foto).", uid.getUidValue());
 				}
-				// La foto se procesa por el canal JDBC.
-				applyPhotoFromAttributes(uid.getUidValue(), attrs);
+				// La foto se procesa por el canal JDBC (best-effort: no abortar si falla).
+				try {
+					applyPhotoFromAttributes(uid.getUidValue(), attrs);
+				} catch (Exception jdbcEx) {
+					LOG.warn("JDBC photo update falló para patron {0} (operacion REST ya fue exitosa). "
+							+ "La foto NO se actualizó pero el resto del update sí. Error: {1}",
+							uid.getUidValue(), jdbcEx.getMessage());
+				}
 			} else if (ObjectClass.GROUP.is(oClass.getObjectClassValue())) {
 				throw new UnsupportedOperationException("Patron categories are read-only in Koha API");
 			} else {
