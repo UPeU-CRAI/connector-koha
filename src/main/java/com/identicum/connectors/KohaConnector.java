@@ -186,9 +186,14 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 				if ("null".equals(newUidValue) || newUidValue.trim().isEmpty()) {
 					throw new ConnectorException("Koha CREATE patron devolvió " + PatronMapper.KOHA_PATRON_ID_NATIVE_NAME + " nulo o vacío. Response: " + response);
 				}
-				// La foto se escribe DESPUES del POST REST: necesita el
-				// borrowernumber (= patron_id = __UID__) recien devuelto por Koha.
-				applyPhotoFromAttributes(newUidValue, attrs);
+				// La foto se escribe DESPUES del POST REST (best-effort: no abortar si falla).
+				try {
+					applyPhotoFromAttributes(newUidValue, attrs);
+				} catch (Exception jdbcEx) {
+					LOG.warn("JDBC photo write falló en CREATE para patron {0} (REST ya fue exitoso). "
+							+ "La foto NO se guardó pero el patron SÍ fue creado. Error: {1}",
+							newUidValue, jdbcEx.getMessage());
+				}
 			} else if (ObjectClass.GROUP.is(oClass.getObjectClassValue())) {
 				throw new UnsupportedOperationException("Patron categories are read-only in Koha API");
 			} else {
