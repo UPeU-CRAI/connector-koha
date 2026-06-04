@@ -59,12 +59,22 @@ public class PatronService extends AbstractKohaService {
     }
 
     /**
-     * Crea un patron en Koha. Si Koha devuelve 409 Conflict, busca el patron
-     * existente primero por cardnumber, luego por userid (fallback).
-     * Hace la operacion idempotente para shadow muerta/perdida en MidPoint.
+     * Crea un patron en Koha. Si Koha devuelve 409 Conflict, hace la operacion
+     * IDEMPOTENTE (create-or-adopt): resuelve el borrower existente y devuelve su
+     * identidad como si el create lo hubiera "adoptado", para que MidPoint linkee
+     * el shadow al borrower existente en UN paso, sin disparar el bucle de reintentos.
      *
-     * Koha puede devolver 409 por conflicto en cardnumber O en userid.
-     * Por eso se intentan ambas busquedas antes de relanzar la excepcion.
+     * Koha devuelve 409 ("A patron record matching these details already exists")
+     * cuando colisiona CUALQUIER campo unico: cardnumber, userid O email
+     * (borrowers.email tiene constraint unico en esta instancia). En el onboarding
+     * canonico UPeU el borrower huerfano arrastra identificadores LEGACY (cardnumber=DNI,
+     * userid basado en nombre) distintos a los CANONICOS que envia MidPoint (cardnumber=codigo,
+     * userid=codigo); el unico campo que comparten es el email institucional. Por eso el
+     * adopt por email es imprescindible ademas de cardnumber/userid.
+     *
+     * Todas las busquedas usan _match=exact para garantizar adopcion 1:1 y evitar
+     * adoptar al borrower equivocado por coincidencia parcial (Koha por defecto hace
+     * match difuso tipo "contains").
      */
     public JSONObject createPatron(JSONObject payload) throws ConnectorException, IOException {
         HttpPost request = new HttpPost(getBaseUrl());
@@ -75,7 +85,7 @@ public class PatronService extends AbstractKohaService {
             String cardnumber = payload.optString("cardnumber", null);
             if (cardnumber != null && !cardnumber.isEmpty()) {
                 LOG.info("CREATE patron 409: buscando por cardnumber={0}.", cardnumber);
-                JSONObject existing = findPatronByCardnumber(cardnumber);
+                JSONObject existing = findPatronExact("cardnumber", cardnumber);
                 if (existing != null && existing.has("patron_id")) {
                     LOG.ok("Patron encontrado via cardnumber={0}, patron_id={1}. Operacion idempotente.",
                             cardnumber, existing.get("patron_id"));
@@ -90,25 +100,46 @@ public class PatronService extends AbstractKohaService {
             String userid = payload.optString("userid", null);
             if (userid != null && !userid.isEmpty()) {
                 LOG.info("CREATE patron 409: buscando por userid={0}.", userid);
-                JSONObject existing = findPatronByUserid(userid);
+                JSONObject existing = findPatronExact("userid", userid);
                 if (existing != null && existing.has("patron_id")) {
                     LOG.ok("Patron encontrado via userid={0}, patron_id={1}. Operacion idempotente.",
                             userid, existing.get("patron_id"));
                     return existing;
                 }
-                LOG.warn("No encontrado por userid={0} tampoco.", userid);
+                LOG.info("No encontrado por userid={0}. Intentando fallback por email.", userid);
             }
 
-            LOG.warn("CREATE patron 409: no se pudo recuperar patron existente ni por cardnumber ni por userid. Relanzando.");
+            // Fallback final REST: buscar por email institucional.
+            // En el universo de huerfanos UPeU, el email es frecuentemente el UNICO
+            // identificador compartido entre el borrower legacy y el focus canonico.
+            String email = payload.optString("email", null);
+            if (email != null && !email.isEmpty()) {
+                LOG.info("CREATE patron 409: buscando por email={0}.", email);
+                JSONObject existing = findPatronExact("email", email);
+                if (existing != null && existing.has("patron_id")) {
+                    LOG.ok("Patron encontrado via email={0}, patron_id={1}. Operacion idempotente.",
+                            email, existing.get("patron_id"));
+                    return existing;
+                }
+                LOG.warn("No encontrado por email={0} tampoco.", email);
+            }
+
+            LOG.warn("CREATE patron 409: no se pudo recuperar patron existente por cardnumber, userid ni email. "
+                    + "El conflicto puede ser por atributo extendido unico (DNI); se intentara fallback JDBC en KohaConnector. Relanzando.");
             throw e;
         }
     }
 
     /**
-     * Busca un patron por userid. Devuelve el primer resultado o null si no existe.
+     * Busca un patron por un campo indexado de Koha (cardnumber|userid|email) con
+     * coincidencia EXACTA. Devuelve el primer resultado o null si no existe.
+     *
+     * Se fuerza _match=exact porque la API Koha por defecto aplica match difuso
+     * ("contains"): sin exact, buscar email="a@x" podria devolver "aa@x", lo que en
+     * el contexto de adopcion idempotente significaria linkear al borrower equivocado.
      */
-    private JSONObject findPatronByUserid(String userid) throws ConnectorException, IOException {
-        String url = getBaseUrl() + "?userid=" + urlEncodeUTF8(userid) + "&_per_page=1&_page=1";
+    private JSONObject findPatronExact(String field, String value) throws ConnectorException, IOException {
+        String url = getBaseUrl() + "?" + field + "=" + urlEncodeUTF8(value) + "&_match=exact&_per_page=1&_page=1";
         HttpGet request = new HttpGet(url);
         request.setHeader("x-koha-embed", "extended_attributes");
         String responseBody = callRequest(request);
@@ -132,40 +163,7 @@ public class PatronService extends AbstractKohaService {
             }
             return null;
         } catch (org.json.JSONException je) {
-            LOG.warn("No se pudo parsear la respuesta al buscar patron por userid={0}: {1}", userid, responseBody);
-            return null;
-        }
-    }
-
-    /**
-     * Busca un patron por cardnumber. Devuelve el primer resultado o null si no existe.
-     */
-    private JSONObject findPatronByCardnumber(String cardnumber) throws ConnectorException, IOException {
-        String url = getBaseUrl() + "?cardnumber=" + urlEncodeUTF8(cardnumber) + "&_per_page=1&_page=1";
-        HttpGet request = new HttpGet(url);
-        request.setHeader("x-koha-embed", "extended_attributes");
-        String responseBody = callRequest(request);
-        if (responseBody == null || responseBody.trim().isEmpty()) {
-            return null;
-        }
-        try {
-            String trimmed = responseBody.trim();
-            if (trimmed.startsWith("[")) {
-                org.json.JSONArray arr = new org.json.JSONArray(trimmed);
-                if (arr.length() > 0) {
-                    return arr.getJSONObject(0);
-                }
-                return null;
-            } else if (trimmed.startsWith("{")) {
-                JSONObject obj = new JSONObject(trimmed);
-                if (obj.has("patron_id")) {
-                    return obj;
-                }
-                return null;
-            }
-            return null;
-        } catch (org.json.JSONException je) {
-            LOG.warn("No se pudo parsear la respuesta al buscar patron por cardnumber={0}: {1}", cardnumber, responseBody);
+            LOG.warn("No se pudo parsear la respuesta al buscar patron por {0}={1}: {2}", field, value, responseBody);
             return null;
         }
     }

@@ -4,6 +4,7 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpPatch;
+import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.entity.ContentType;
@@ -79,8 +80,11 @@ public class PatronServiceTest {
 
     @Test
     void testUpdatePatronSuccess() throws Exception {
-        CloseableHttpResponse resp = prepareResponse(200, "{}");
-        when(httpClient.execute(any(HttpPatch.class))).thenReturn(resp);
+        // updatePatron hace GET (getPatronBasic) + merge del delta + PUT full-replace.
+        CloseableHttpResponse getResp = prepareResponse(200, "{\"patron_id\":1,\"userid\":\"jdoe\",\"surname\":\"Doe\",\"library_id\":\"MAIN\"}");
+        CloseableHttpResponse putResp = prepareResponse(200, "{}");
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(getResp);
+        when(httpClient.execute(any(HttpPut.class))).thenReturn(putResp);
 
         JSONObject payload = new JSONObject().put("email", "a@b.com");
         assertDoesNotThrow(() -> patronService.updatePatron("1", payload));
@@ -197,11 +201,67 @@ public class PatronServiceTest {
     }
 
     @Test
-    void testCreatePatron_409_throwsAlreadyExistsException() throws Exception {
-        CloseableHttpResponse resp = prepareResponse(409, "{\"error\":\"Conflict\"}");
-        when(httpClient.execute(any(HttpPost.class))).thenReturn(resp);
-        JSONObject payload = new JSONObject().put("userid", "existing");
+    void testCreatePatron_409_noMatch_throwsAlreadyExistsException() throws Exception {
+        // POST -> 409 ; todas las busquedas de adopt (GET) devuelven array vacio -> relanza 409.
+        CloseableHttpResponse postResp = prepareResponse(409, "{\"error\":\"A patron record matching these details already exists\"}");
+        CloseableHttpResponse getResp = prepareResponse(200, "[]");
+        when(httpClient.execute(any(HttpPost.class))).thenReturn(postResp);
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(getResp);
+        JSONObject payload = new JSONObject().put("userid", "existing").put("email", "ghost@upeu.edu.pe");
         assertThrows(AlreadyExistsException.class, () -> patronService.createPatron(payload));
+    }
+
+    @Test
+    void testCreatePatron_409_adoptByCardnumber() throws Exception {
+        // POST -> 409 ; GET por cardnumber devuelve el borrower existente -> adopta (idempotente).
+        CloseableHttpResponse postResp = prepareResponse(409, "{\"error\":\"A patron record matching these details already exists\"}");
+        CloseableHttpResponse getResp = prepareResponse(200, "[{\"patron_id\":777,\"cardnumber\":\"202612131\",\"userid\":\"maria.pompa\"}]");
+        when(httpClient.execute(any(HttpPost.class))).thenReturn(postResp);
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(getResp);
+        JSONObject payload = new JSONObject().put("cardnumber", "202612131").put("userid", "202612131");
+        JSONObject adopted = patronService.createPatron(payload);
+        assertEquals(777, adopted.getInt("patron_id"));
+    }
+
+    @Test
+    void testCreatePatron_409_adoptByEmail() throws Exception {
+        // Caso real del storm: cardnumber/userid CANONICOS no matchean al borrower legacy,
+        // solo el email institucional lo hace. POST -> 409 ; GET cardnumber -> [] ; GET userid -> [] ;
+        // GET email -> borrower existente -> adopta por email.
+        CloseableHttpResponse postResp = prepareResponse(409, "{\"error\":\"A patron record matching these details already exists\"}");
+        CloseableHttpResponse emptyResp = prepareResponse(200, "[]");
+        CloseableHttpResponse emailResp = prepareResponse(200, "[{\"patron_id\":1944,\"cardnumber\":\"45788343\",\"userid\":\"robertoestrada\",\"email\":\"robertoestrada@upeu.edu.pe\"}]");
+        when(httpClient.execute(any(HttpPost.class))).thenReturn(postResp);
+        // El primer y segundo GET (cardnumber, userid) -> vacios ; el tercero (email) -> match.
+        when(httpClient.execute(any(HttpGet.class)))
+                .thenReturn(emptyResp)
+                .thenReturn(emptyResp)
+                .thenReturn(emailResp);
+        JSONObject payload = new JSONObject()
+                .put("cardnumber", "201110640")
+                .put("userid", "201110640")
+                .put("email", "robertoestrada@upeu.edu.pe");
+        JSONObject adopted = patronService.createPatron(payload);
+        assertEquals(1944, adopted.getInt("patron_id"));
+    }
+
+    @Test
+    void testCreatePatron_409_adoptUsesMatchExact() throws Exception {
+        // Verifica que las busquedas de adopt fuerzan _match=exact (evita adoptar al
+        // borrower equivocado por coincidencia parcial / fuzzy de Koha).
+        CloseableHttpResponse postResp = prepareResponse(409, "{\"error\":\"A patron record matching these details already exists\"}");
+        CloseableHttpResponse getResp = prepareResponse(200, "[{\"patron_id\":5,\"cardnumber\":\"C5\"}]");
+        when(httpClient.execute(any(HttpPost.class))).thenReturn(postResp);
+        final HttpGet[] captured = new HttpGet[1];
+        when(httpClient.execute(any(HttpGet.class))).thenAnswer(inv -> {
+            captured[0] = inv.getArgument(0);
+            return getResp;
+        });
+        JSONObject payload = new JSONObject().put("cardnumber", "C5");
+        patronService.createPatron(payload);
+        assertNotNull(captured[0]);
+        assertTrue(captured[0].getURI().toString().contains("_match=exact"),
+                "La busqueda de adopt debe incluir _match=exact. URI=" + captured[0].getURI());
     }
 
     @Test
