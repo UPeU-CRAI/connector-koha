@@ -209,7 +209,13 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 			if (ObjectClass.ACCOUNT.is(oClass.getObjectClassValue()) && jdbcConnectionProvider != null) {
 				try {
 					JSONObject tmpPayload = patronMapper.buildPatronJson(attrs, true);
-					String dniValue = tmpPayload.optString("userid", null);
+					// v1.3.10: el DNI real viaja en el extended_attribute type=DNI, NO en userid.
+					// Para estudiantes userid=codigo universitario (codigo != DNI), por lo que el
+					// fallback v1.3.8 buscaba borrower_attributes.attribute=codigo y nunca matcheaba.
+					String dniValue = extractDniFromExtendedAttributes(tmpPayload);
+					if (StringUtil.isBlank(dniValue)) {
+						dniValue = tmpPayload.optString("userid", null);
+					}
 					if (StringUtil.isNotBlank(dniValue)) {
 						LOG.info("CREATE 409 — fallback JDBC por DNI extended_attribute={0}", dniValue);
 						String borrowerNo = findBorrowerByDniJdbc(dniValue);
@@ -605,7 +611,7 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 	 * Se usa como 3er fallback en create() cuando Koha devuelve 409 y la búsqueda
 	 * REST por cardnumber y userid no encuentra el patron (conflicto por DNI único).
 	 *
-	 * @param dniValue valor del DNI a buscar (en MidPoint = userid = __NAME__ del patrón)
+	 * @param dniValue valor del DNI REAL a buscar (extraido del extended_attribute type=DNI)
 	 * @return borrowernumber como String, o null si no encontrado o JDBC no disponible
 	 */
 	private String findBorrowerByDniJdbc(String dniValue) {
@@ -633,6 +639,39 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 			if (ps != null) try { ps.close(); } catch (Exception ignore) {}
 			if (conn != null) try { conn.close(); } catch (Exception ignore) {}
 		}
+	}
+
+	/**
+	 * Extrae el valor del atributo extendido DNI del payload Koha (v1.3.10).
+	 * El payload trae extended_attributes como JSONArray de {"type":"DNI","value":"<dni>"}.
+	 * Para estudiantes el DNI real != userid (codigo universitario), por lo que el fallback
+	 * JDBC debe buscar por este valor y no por userid.
+	 *
+	 * @param payload payload Koha construido por PatronMapper.buildPatronJson
+	 * @return el valor del DNI, o null si no esta presente
+	 */
+	private String extractDniFromExtendedAttributes(JSONObject payload) {
+		if (payload == null) {
+			return null;
+		}
+		Object raw = payload.opt("extended_attributes");
+		if (!(raw instanceof org.json.JSONArray)) {
+			return null;
+		}
+		org.json.JSONArray arr = (org.json.JSONArray) raw;
+		for (int i = 0; i < arr.length(); i++) {
+			JSONObject attr = arr.optJSONObject(i);
+			if (attr == null) {
+				continue;
+			}
+			if ("DNI".equals(attr.optString("type", null))) {
+				String value = attr.optString("value", null);
+				if (StringUtil.isNotBlank(value)) {
+					return value;
+				}
+			}
+		}
+		return null;
 	}
 
 	private ConnectorObject enrichWithPhoto(ConnectorObject co, boolean fetchPhoto) {

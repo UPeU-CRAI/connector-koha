@@ -246,6 +246,73 @@ public class PatronServiceTest {
     }
 
     @Test
+    void testCreatePatron_409_adoptByDni() throws Exception {
+        // v1.3.10: el 409 es por el atributo extendido DNI (unique_id=1), NO por
+        // cardnumber/userid/email. MidPoint envia cardnumber=codigo universitario y el DNI
+        // real dentro de extended_attributes. El borrower legacy huerfano tiene cardnumber=DNI.
+        // POST -> 409 ; GET cardnumber(codigo) -> [] ; GET userid(codigo) -> [] ; GET email -> [] ;
+        // GET cardnumber(DNI) -> borrower legacy -> adopta por DNI.
+        CloseableHttpResponse postResp = prepareResponse(409, "{\"error\":\"A patron record matching these details already exists\"}");
+        CloseableHttpResponse emptyResp = prepareResponse(200, "[]");
+        CloseableHttpResponse dniResp = prepareResponse(200, "[{\"patron_id\":4321,\"cardnumber\":\"45678901\",\"userid\":\"legacyuser\"}]");
+        when(httpClient.execute(any(HttpPost.class))).thenReturn(postResp);
+        // GET#1 cardnumber=codigo []; GET#2 userid=codigo []; GET#3 email []; GET#4 cardnumber=DNI match.
+        when(httpClient.execute(any(HttpGet.class)))
+                .thenReturn(emptyResp)
+                .thenReturn(emptyResp)
+                .thenReturn(emptyResp)
+                .thenReturn(dniResp);
+        JSONObject payload = new JSONObject()
+                .put("cardnumber", "202010123")
+                .put("userid", "202010123")
+                .put("email", "student@upeu.edu.pe")
+                .put("extended_attributes", new JSONArray()
+                        .put(new JSONObject().put("type", "DNI").put("value", "45678901")));
+        JSONObject adopted = patronService.createPatron(payload);
+        assertEquals(4321, adopted.getInt("patron_id"));
+    }
+
+    @Test
+    void testCreatePatron_409_adoptByDni_usesCardnumberDniExactLookup() throws Exception {
+        // Verifica que el ultimo lookup de adopt por DNI consulta cardnumber=<DNI> con _match=exact.
+        CloseableHttpResponse postResp = prepareResponse(409, "{\"error\":\"conflict\"}");
+        CloseableHttpResponse emptyResp = prepareResponse(200, "[]");
+        CloseableHttpResponse dniResp = prepareResponse(200, "[{\"patron_id\":99}]");
+        when(httpClient.execute(any(HttpPost.class))).thenReturn(postResp);
+        final java.util.List<HttpGet> gets = new java.util.ArrayList<>();
+        when(httpClient.execute(any(HttpGet.class))).thenAnswer(inv -> {
+            gets.add(inv.getArgument(0));
+            // Solo el 4to GET (cardnumber=DNI) devuelve match.
+            return gets.size() >= 4 ? dniResp : emptyResp;
+        });
+        JSONObject payload = new JSONObject()
+                .put("cardnumber", "201912345")
+                .put("userid", "201912345")
+                .put("email", "x@upeu.edu.pe")
+                .put("extended_attributes", new JSONArray()
+                        .put(new JSONObject().put("type", "DNI").put("value", "70123456")));
+        patronService.createPatron(payload);
+        HttpGet dniGet = gets.get(gets.size() - 1);
+        String uri = dniGet.getURI().toString();
+        assertTrue(uri.contains("cardnumber=70123456"), "Debe buscar cardnumber=DNI. URI=" + uri);
+        assertTrue(uri.contains("_match=exact"), "Debe forzar _match=exact. URI=" + uri);
+    }
+
+    @Test
+    void testCreatePatron_409_noDni_throwsAlreadyExists() throws Exception {
+        // Sin extended_attribute DNI y sin match por cardnumber/userid/email -> relanza 409.
+        CloseableHttpResponse postResp = prepareResponse(409, "{\"error\":\"conflict\"}");
+        CloseableHttpResponse emptyResp = prepareResponse(200, "[]");
+        when(httpClient.execute(any(HttpPost.class))).thenReturn(postResp);
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(emptyResp);
+        JSONObject payload = new JSONObject()
+                .put("cardnumber", "202010999")
+                .put("userid", "202010999")
+                .put("email", "nodni@upeu.edu.pe");
+        assertThrows(AlreadyExistsException.class, () -> patronService.createPatron(payload));
+    }
+
+    @Test
     void testCreatePatron_409_adoptUsesMatchExact() throws Exception {
         // Verifica que las busquedas de adopt fuerzan _match=exact (evita adoptar al
         // borrower equivocado por coincidencia parcial / fuzzy de Koha).
