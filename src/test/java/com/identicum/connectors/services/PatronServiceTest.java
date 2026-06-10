@@ -338,4 +338,80 @@ public class PatronServiceTest {
         JSONObject payload = new JSONObject().put("userid", "newuser");
         assertThrows(ConnectionFailedException.class, () -> patronService.createPatron(payload));
     }
+
+    /**
+     * v1.3.11 — merge-preserve de extended_attributes via endpoint dedicado.
+     * GET actual trae DNI (ajeno al gobierno) + un STUDY_LEVEL viejo (gobernado).
+     * MidPoint envia STUDY_LEVEL nuevo + STUDYCYCLE.
+     * Resultado esperado en el PUT: DNI preservado, STUDY_LEVEL reemplazado por el nuevo,
+     * STUDYCYCLE agregado, y el GET viejo de STUDY_LEVEL eliminado.
+     */
+    @Test
+    void testReplaceExtendedAttributes_mergePreserve() throws Exception {
+        String currentBody = "{\"patron_id\":77,\"extended_attributes\":["
+                + "{\"extended_attribute_id\":1,\"type\":\"DNI\",\"value\":\"12345678\"},"
+                + "{\"extended_attribute_id\":2,\"type\":\"STUDY_LEVEL\",\"value\":\"3\"}"
+                + "]}";
+        CloseableHttpResponse getResp = prepareResponse(200, currentBody);
+        CloseableHttpResponse putResp = prepareResponse(200, "[]");
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(getResp);
+        final HttpPut[] capturedPut = new HttpPut[1];
+        when(httpClient.execute(any(HttpPut.class))).thenAnswer(inv -> {
+            capturedPut[0] = inv.getArgument(0);
+            return putResp;
+        });
+
+        JSONArray desired = new JSONArray()
+                .put(new JSONObject().put("type", "STUDY_LEVEL").put("value", "6"))
+                .put(new JSONObject().put("type", "STUDYCYCLE").put("value", "1"))
+                .put(new JSONObject().put("type", "STUDYCYCLE").put("value", "3"));
+
+        patronService.replaceExtendedAttributes("77", desired);
+
+        assertNotNull(capturedPut[0], "Debe ejecutar PUT al endpoint dedicado");
+        assertTrue(capturedPut[0].getURI().toString().endsWith("/patrons/77/extended_attributes"),
+                "URI PUT incorrecta: " + capturedPut[0].getURI());
+
+        String body = org.apache.http.util.EntityUtils.toString(
+                ((org.apache.http.HttpEntityEnclosingRequest) capturedPut[0]).getEntity());
+        JSONArray sent = new JSONArray(body);
+
+        int dni = 0, sl6 = 0, sl3old = 0, cyc = 0;
+        for (int i = 0; i < sent.length(); i++) {
+            JSONObject e = sent.getJSONObject(i);
+            String t = e.getString("type"), v = e.optString("value");
+            if (t.equals("DNI") && v.equals("12345678")) dni++;
+            if (t.equals("STUDY_LEVEL") && v.equals("6")) sl6++;
+            if (t.equals("STUDY_LEVEL") && v.equals("3")) sl3old++;
+            if (t.equals("STUDYCYCLE")) cyc++;
+        }
+        assertEquals(1, dni, "DNI ajeno debe preservarse");
+        assertEquals(1, sl6, "STUDY_LEVEL nuevo (6) debe estar");
+        assertEquals(0, sl3old, "STUDY_LEVEL viejo (3) debe eliminarse (gobierno autoritativo)");
+        assertEquals(2, cyc, "Ambos STUDYCYCLE deben agregarse");
+        // El PUT no debe incluir extended_attribute_id (Koha lo rechaza).
+        assertFalse(body.contains("extended_attribute_id"), "El PUT no debe enviar extended_attribute_id");
+    }
+
+    @Test
+    void testReplaceExtendedAttributes_emptyDesiredPreservesUngoverned() throws Exception {
+        // Si MidPoint no envia STUDYCYCLE/STUDY_LEVEL pero el patron tiene DNI,
+        // el DNI se preserva y el set final solo contiene DNI.
+        String currentBody = "{\"patron_id\":88,\"extended_attributes\":["
+                + "{\"type\":\"DNI\",\"value\":\"99999999\"}]}";
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(prepareResponse(200, currentBody));
+        final HttpPut[] capturedPut = new HttpPut[1];
+        when(httpClient.execute(any(HttpPut.class))).thenAnswer(inv -> {
+            capturedPut[0] = inv.getArgument(0);
+            return prepareResponse(200, "[]");
+        });
+
+        patronService.replaceExtendedAttributes("88", new JSONArray());
+
+        String body = org.apache.http.util.EntityUtils.toString(
+                ((org.apache.http.HttpEntityEnclosingRequest) capturedPut[0]).getEntity());
+        JSONArray sent = new JSONArray(body);
+        assertEquals(1, sent.length());
+        assertEquals("DNI", sent.getJSONObject(0).getString("type"));
+    }
 }

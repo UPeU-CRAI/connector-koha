@@ -288,6 +288,100 @@ public class PatronService extends AbstractKohaService {
         }
     }
 
+    /**
+     * Escribe los extended_attributes de un patron EXISTENTE via el endpoint dedicado
+     * de Koha {@code PUT /patrons/{id}/extended_attributes} (overwrite-all).
+     *
+     * <p>MOTIVO (v1.3.11): la API REST de Koha NO acepta {@code extended_attributes}
+     * en el cuerpo del {@code PUT /patrons/{id}} (por eso esta en
+     * {@link #READ_ONLY_PATRON_FIELDS} y se elimina del PUT principal). Los atributos
+     * extendidos SOLO se gestionan por su endpoint dedicado. Hasta v1.3.10 el conector
+     * NUNCA los escribia en UPDATE -> los borrowers existentes jamas recibian STUDYCYCLE
+     * ni ningun otro extended_attribute por reconcile.</p>
+     *
+     * <p>SEMANTICA merge-preserve (gobierno IGA): el endpoint PUT de Koha es
+     * overwrite-all (reemplaza TODOS los extended_attributes del patron). Para respetar
+     * el modelo de gobierno de MidPoint (tolerant=true + intolerantValuePattern) sin
+     * destruir atributos tolerados que MidPoint no envia, se construye el set final asi:</p>
+     * <ol>
+     *   <li>GET de los extended_attributes ACTUALES del patron.</li>
+     *   <li>Se PRESERVAN las entradas actuales cuyo {@code type} NO aparece en el
+     *       conjunto de valores deseados que envia MidPoint (atributos tolerados ajenos
+     *       al gobierno de este flujo).</li>
+     *   <li>Se REEMPLAZAN por completo las entradas de los {@code type} que MidPoint
+     *       SI envia (gobierno autoritativo de STUDYCYCLE/STUDY_LEVEL/AREA/etc.).</li>
+     * </ol>
+     * <p>Asi, un type gobernado se sincroniza 1:1 con lo que computa MidPoint (incluye
+     * el caso de removerlo: si MidPoint deja de enviar un type que antes enviaba, ese
+     * type se vacia porque ya no esta en el set deseado y sus entradas no se preservan).
+     * Un type ajeno (no enviado nunca) se conserva intacto.</p>
+     *
+     * <p>El formato de cada entrada enviada a Koha es {@code {"type":X,"value":Y}}.
+     * Compatible con {@code convertExtendedAttributesToKoha} y con el adopt-by-DNI.</p>
+     *
+     * @param uid            patron_id (borrowernumber)
+     * @param desiredEntries valores deseados que envia MidPoint, como JSONArray de
+     *                       objetos {@code {"type":...,"value":...}} (puede ser vacio)
+     */
+    public void replaceExtendedAttributes(String uid, JSONArray desiredEntries)
+            throws ConnectorException, IOException {
+        if (desiredEntries == null) {
+            desiredEntries = new JSONArray();
+        }
+
+        // 1) Conjunto de types gobernados = los que MidPoint envia en este UPDATE.
+        java.util.Set<String> governedTypes = new java.util.HashSet<>();
+        for (int i = 0; i < desiredEntries.length(); i++) {
+            JSONObject e = desiredEntries.optJSONObject(i);
+            if (e != null) {
+                String t = e.optString("type", null);
+                if (t != null && !t.isEmpty()) {
+                    governedTypes.add(t);
+                }
+            }
+        }
+
+        // 2) GET actuales y preservar los types NO gobernados (tolerados ajenos al flujo).
+        JSONArray finalSet = new JSONArray();
+        JSONObject current = getPatron(uid);
+        Object rawCurrent = current.opt("extended_attributes");
+        if (rawCurrent instanceof JSONArray) {
+            JSONArray currentArr = (JSONArray) rawCurrent;
+            for (int i = 0; i < currentArr.length(); i++) {
+                JSONObject e = currentArr.optJSONObject(i);
+                if (e == null) continue;
+                String t = e.optString("type", null);
+                if (t == null || t.isEmpty()) continue;
+                if (!governedTypes.contains(t)) {
+                    // Type ajeno al gobierno de MidPoint: preservar tal cual,
+                    // re-normalizando a {type,value} (Koha PUT no acepta extended_attribute_id).
+                    JSONObject preserved = new JSONObject();
+                    preserved.put("type", t);
+                    preserved.put("value", e.optString("value", ""));
+                    finalSet.put(preserved);
+                }
+            }
+        }
+
+        // 3) Agregar los valores deseados (gobierno autoritativo de sus types).
+        for (int i = 0; i < desiredEntries.length(); i++) {
+            JSONObject e = desiredEntries.optJSONObject(i);
+            if (e == null) continue;
+            String t = e.optString("type", null);
+            if (t == null || t.isEmpty()) continue;
+            JSONObject entry = new JSONObject();
+            entry.put("type", t);
+            entry.put("value", e.optString("value", ""));
+            finalSet.put(entry);
+        }
+
+        // 4) PUT overwrite-all al endpoint dedicado. El cuerpo es el ARRAY directo.
+        HttpPut request = new HttpPut(getBaseUrl() + "/" + uid + "/extended_attributes");
+        LOG.ok("PUT extended_attributes patron {0}: {1} entradas (governedTypes={2})",
+                uid, finalSet.length(), governedTypes);
+        callRequestWithArrayEntity(request, finalSet);
+    }
+
     public void deletePatron(String uid) throws ConnectorException, IOException {
         HttpDelete request = new HttpDelete(getBaseUrl() + "/" + uid);
         callRequest(request);

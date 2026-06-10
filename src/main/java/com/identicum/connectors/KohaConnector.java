@@ -259,11 +259,24 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 					patronMapper.applyEnableAttribute(changes, enabled);
 				}
 				// buildPatronJson excluye photo/photo_mimetype del payload REST.
-				// El PATCH REST solo se envia si quedan cambios reales que aplicar.
+				// Tambien excluye extended_attributes del PUT principal (van por endpoint dedicado).
+				// El PUT principal solo se envia si quedan cambios reales que aplicar.
 				if (changes.length() > 0) {
 					patronService.updatePatron(uid.getUidValue(), changes);
 				} else {
-					LOG.ok("Update Uid {0}: sin cambios REST (solo atributos de foto).", uid.getUidValue());
+					LOG.ok("Update Uid {0}: sin cambios en el PUT principal (solo foto/extended_attributes).", uid.getUidValue());
+				}
+
+				// v1.3.11 — extended_attributes en UPDATE: la API Koha NO los acepta en el
+				// PUT /patrons/{id}; se escriben por el endpoint dedicado
+				// PUT /patrons/{id}/extended_attributes (overwrite-all con merge-preserve).
+				// Esto habilita el backfill de STUDYCYCLE (y demas) a borrowers EXISTENTES
+				// via reconcile de MidPoint. Si el atributo no vino en el delta -> NO-OP.
+				JSONArray extAttrs = patronMapper.extractExtendedAttributesArray(attrs);
+				if (extAttrs != null) {
+					LOG.ok("Update Uid {0}: escribiendo extended_attributes ({1} entradas) via endpoint dedicado.",
+							uid.getUidValue(), extAttrs.length());
+					patronService.replaceExtendedAttributes(uid.getUidValue(), extAttrs);
 				}
 				// La foto se procesa por el canal JDBC (best-effort: no abortar si falla).
 				try {

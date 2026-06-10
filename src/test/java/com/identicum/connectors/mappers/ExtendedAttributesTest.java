@@ -36,6 +36,10 @@ class ExtendedAttributesTest {
 
     @Test
     void testReadEmptyExtendedAttributes() {
+        // v1.3.11: cuando el embed esta presente pero la lista es vacia, el atributo
+        // DEBE emitirse (vacio) para que MidPoint lo trate como "completo" y pueda
+        // computar el delta aditivo (backfill). Antes se omitia -> MidPoint lo marcaba
+        // incompleto y suprimia el add (causa raiz del fallo de backfill de STUDYCYCLE).
         JSONObject kohaJson = new JSONObject();
         kohaJson.put("patron_id", 42);
         kohaJson.put("userid", "testuser");
@@ -43,9 +47,24 @@ class ExtendedAttributesTest {
 
         ConnectorObject co = mapper.convertJsonToPatronObject(kohaJson);
         assertNotNull(co);
-        // Empty array should not produce an attribute
         Attribute attr = co.getAttributeByName("extended_attributes");
-        assertNull(attr, "Empty extended_attributes should not be in ConnectorObject");
+        assertNotNull(attr, "Empty extended_attributes (embed present) must be emitted to mark the attribute complete");
+        assertTrue(attr.getValue() == null || attr.getValue().isEmpty(),
+                "Empty embed must produce an attribute with no values");
+    }
+
+    @Test
+    void testReadAbsentExtendedAttributesKey() {
+        // Si el JSON no trae la clave (GET sin embed, fuera del flujo de reconcile),
+        // el atributo se omite — no podemos afirmar nada sobre su estado.
+        JSONObject kohaJson = new JSONObject();
+        kohaJson.put("patron_id", 42);
+        kohaJson.put("userid", "testuser");
+
+        ConnectorObject co = mapper.convertJsonToPatronObject(kohaJson);
+        assertNotNull(co);
+        Attribute attr = co.getAttributeByName("extended_attributes");
+        assertNull(attr, "Absent embed key must not produce an extended_attributes attribute");
     }
 
     @Test

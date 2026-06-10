@@ -90,6 +90,44 @@ public abstract class AbstractKohaService {
         }
     }
 
+    /**
+     * Variante de {@link #callRequestWithEntity} para endpoints cuyo cuerpo es un
+     * ARRAY JSON de nivel superior (no un objeto). Lo usa, por ejemplo,
+     * {@code PUT /patrons/{id}/extended_attributes}, que espera un array de
+     * {@code {"type":...,"value":...}}.
+     *
+     * <p>Devuelve {@code null} (no un JSONObject) porque la respuesta puede ser un
+     * array o un 204 sin cuerpo; los llamadores actuales no necesitan el cuerpo.</p>
+     */
+    protected void callRequestWithArrayEntity(HttpEntityEnclosingRequestBase request, org.json.JSONArray payload)
+            throws ConnectorException, IOException {
+        request.setHeader("Content-Type", "application/json");
+        request.setHeader("Accept", "application/json");
+        if (payload != null) {
+            request.setEntity(new ByteArrayEntity(payload.toString().getBytes(StandardCharsets.UTF_8)));
+        }
+
+        LOG.ok("Executing {0} request to {1} (array body)", request.getMethod(), request.getURI());
+
+        try (CloseableHttpResponse response = executeWithRetry(() -> httpClient.execute(request))) {
+            processResponseErrors(response, request);
+            HttpEntity entity = response.getEntity();
+            if (entity != null) {
+                // Drenar el cuerpo para liberar la conexion; no se parsea.
+                EntityUtils.consumeQuietly(entity);
+            }
+            LOG.ok("Response {0} {1}: OK", request.getMethod(), request.getURI());
+        } catch (HttpHostConnectException e) {
+            throw new ConnectionFailedException("Connection to Koha service at '" + serviceAddress + "' failed. Details: " + e.getMessage(), e);
+        } catch (SocketTimeoutException e) {
+            throw new ConnectionFailedException("Connection to Koha service timed out for request to '" + request.getURI() + "'. Details: " + e.getMessage(), e);
+        } catch (ClientProtocolException e) {
+            throw new ConnectorIOException("HTTP protocol error during request to '" + request.getURI() + "'. Details: " + e.getMessage(), e);
+        } catch (IOException e) {
+            throw new ConnectorIOException("IO error during request to '" + request.getURI() + "'. Details: " + e.getMessage(), e);
+        }
+    }
+
     protected String callRequest(HttpRequestBase request) throws ConnectorException, IOException {
         request.setHeader("Accept", "application/json");
         request.setHeader("Accept-Encoding", "gzip");

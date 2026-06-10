@@ -283,14 +283,30 @@ public class PatronMapper extends BaseMapper {
                 continue;
             }
 
-            // Special handling for extended_attributes
-            if ("extended_attributes".equals(meta.getConnIdName()) && kohaJson.has("extended_attributes")) {
-                Object raw = kohaJson.get("extended_attributes");
-                if (raw instanceof JSONArray) {
-                    List<String> converted = convertExtendedAttributesFromKoha((JSONArray) raw);
-                    if (!converted.isEmpty()) {
-                        builder.addAttribute(AttributeBuilder.build("extended_attributes", converted));
-                    }
+            // Special handling for extended_attributes.
+            //
+            // CRITICAL (v1.3.11) — habilitacion del reconcile/backfill:
+            // Cuando el patron se obtiene con el embed (x-koha-embed: extended_attributes),
+            // el conector SIEMPRE debe exponer el atributo 'extended_attributes' en el
+            // ConnectorObject, INCLUSO si la lista esta vacia. Si el atributo se omite,
+            // MidPoint lo marca como "incompleto" (no fully-fetched) y SUPRIME los deltas
+            // aditivos de valores tolerados durante el reconcile -> el backfill de STUDYCYCLE
+            // (y de cualquier extended_attribute) NUNCA se computa para borrowers existentes.
+            // Emitir el atributo (aunque vacio) lo marca "completo" y permite que MidPoint
+            // calcule el add y lo envie en el UPDATE.
+            //
+            // La presencia del embed se infiere de que la clave exista en el JSON. El embed
+            // se solicita en TODAS las lecturas de patron (getPatron, findPatronExact y la
+            // busqueda paginada), por lo que un patron real siempre trae la clave; un GET sin
+            // embed (no usado en el flujo de reconcile) simplemente no la trae y se omite.
+            if ("extended_attributes".equals(meta.getConnIdName())) {
+                if (kohaJson.has("extended_attributes")) {
+                    Object raw = kohaJson.get("extended_attributes");
+                    List<String> converted = (raw instanceof JSONArray)
+                            ? convertExtendedAttributesFromKoha((JSONArray) raw)
+                            : new ArrayList<>();
+                    // Emitir SIEMPRE el atributo cuando el embed estuvo presente, aunque vacio.
+                    builder.addAttribute(AttributeBuilder.build("extended_attributes", converted));
                 }
                 continue;
             }
@@ -351,6 +367,35 @@ public class PatronMapper extends BaseMapper {
             result.add(normalized.toString());
         }
         return result;
+    }
+
+    /**
+     * Extrae y convierte el atributo ConnId {@code extended_attributes} (multivaluado,
+     * lista de strings JSON {@code {"type":...,"value":...}}) a un JSONArray apto para
+     * el endpoint dedicado de Koha {@code PUT /patrons/{id}/extended_attributes}.
+     *
+     * <p>Se usa en UPDATE (v1.3.11): el endpoint principal PUT /patrons/{id} no acepta
+     * extended_attributes, por lo que el conector los escribe por canal aparte. Devuelve
+     * {@code null} si el atributo no esta presente en el conjunto (no hay nada que escribir);
+     * devuelve un array (posiblemente vacio) si el atributo esta presente.</p>
+     *
+     * @param attributes atributos ConnId de la operacion UPDATE
+     * @return JSONArray de {@code {"type":...,"value":...}}, o {@code null} si el atributo no vino
+     */
+    public JSONArray extractExtendedAttributesArray(Set<Attribute> attributes) {
+        if (attributes == null) {
+            return null;
+        }
+        for (Attribute attr : attributes) {
+            if ("extended_attributes".equals(attr.getName())) {
+                List<Object> values = attr.getValue();
+                if (values == null) {
+                    return new JSONArray();
+                }
+                return convertExtendedAttributesToKoha(values);
+            }
+        }
+        return null;
     }
 
     /**
