@@ -399,11 +399,12 @@ public class PatronServiceTest {
         // el DNI se preserva y el set final solo contiene DNI.
         String currentBody = "{\"patron_id\":88,\"extended_attributes\":["
                 + "{\"type\":\"DNI\",\"value\":\"99999999\"}]}";
+        CloseableHttpResponse putResp = prepareResponse(200, "[]");
         when(httpClient.execute(any(HttpGet.class))).thenReturn(prepareResponse(200, currentBody));
         final HttpPut[] capturedPut = new HttpPut[1];
         when(httpClient.execute(any(HttpPut.class))).thenAnswer(inv -> {
             capturedPut[0] = inv.getArgument(0);
-            return prepareResponse(200, "[]");
+            return putResp;
         });
 
         patronService.replaceExtendedAttributes("88", new JSONArray());
