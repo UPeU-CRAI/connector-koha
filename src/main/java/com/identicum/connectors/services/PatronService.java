@@ -2,6 +2,7 @@ package com.identicum.connectors.services;
 
 import com.identicum.connectors.KohaConfiguration;
 import com.identicum.connectors.KohaFilter;
+import com.identicum.connectors.mappers.PatronMapper;
 import com.identicum.connectors.services.HttpClientAdapter;
 import org.apache.http.client.methods.HttpDelete;
 import org.apache.http.client.methods.HttpGet;
@@ -233,46 +234,45 @@ public class PatronService extends AbstractKohaService {
 
     /**
      * Actualiza un patron en Koha via PUT (full-replace).
-     * La API Koha PUT requiere todos los campos obligatorios (library_id, surname, etc.)
-     * aunque solo haya cambiado un campo. Por eso hacemos GET primero, mergeamos
-     * el delta encima, y luego enviamos el objeto completo.
+     *
+     * <p>La API Koha PUT requiere todos los campos OBLIGATORIOS (library_id, surname,
+     * cardnumber, category_id, userid) aunque solo haya cambiado un campo. Por eso hacemos
+     * GET primero (para arrastrar los obligatorios), mergeamos el delta encima, y enviamos
+     * el objeto resultante.</p>
+     *
+     * <p>FILTRADO POR ALLOWLIST (v1.3.12): el schema patron.yaml de Koha declara
+     * {@code additionalProperties: false}; ademas el GET devuelve campos CALCULADOS que NO
+     * pertenecen al schema escribible (p.ej. {@code self_renewal_available},
+     * {@code check_previous_checkout}, contadores, etc.). Reenviar CUALQUIER campo ajeno al
+     * schema escribible provoca {@code Koha::Exceptions::Object::PropertyNotFound} -> HTTP 500.
+     * Por eso el body del PUT se reduce a la ALLOWLIST de campos que el conector sabe que son
+     * escribibles ({@link PatronMapper#getWritablePatronNativeFields()}). Esto reemplaza al
+     * antiguo enfoque de DENYLIST (read-only fields), fragil ante nuevos campos calculados
+     * que Koha agregue al GET en cada version.</p>
+     *
+     * <p>Los valores del delta entrante ({@code payload}) que correspondan a un campo
+     * escribible se aplican aunque el GET no los tuviera; los campos de solo lectura nunca
+     * se envian, vengan del GET o del delta.</p>
      */
     public void updatePatron(String uid, JSONObject payload) throws ConnectorException, IOException {
-        // GET estado actual para construir body PUT completo
+        // GET estado actual para arrastrar los campos OBLIGATORIOS del PUT.
         JSONObject current = getPatronBasic(uid);
-        // Overlay: los nuevos valores sobreescriben los actuales
+        // Overlay: los nuevos valores sobreescriben los actuales.
         for (String key : payload.keySet()) {
             current.put(key, payload.get(key));
         }
-        // Eliminar campos de solo-lectura que Koha rechazaria en el PUT
-        for (String readOnly : READ_ONLY_PATRON_FIELDS) {
-            current.remove(readOnly);
+        // Construir el body SOLO con la allowlist de campos escribibles conocidos.
+        // Cualquier campo calculado/no-schema (self_renewal_available, etc.) queda fuera.
+        java.util.Set<String> writable = PatronMapper.getWritablePatronNativeFields();
+        JSONObject body = new JSONObject();
+        for (String key : writable) {
+            if (current.has(key)) {
+                body.put(key, current.get(key));
+            }
         }
         HttpPut request = new HttpPut(getBaseUrl() + "/" + uid);
-        callRequestWithEntity(request, current);
+        callRequestWithEntity(request, body);
     }
-
-    /**
-     * Campos que Koha calcula internamente y no acepta en PUT.
-     * Si un campo del GET se incluye en el PUT y es read-only, Koha devuelve 400.
-     * Lista expandida tras analizar respuestas 400 en PROD.
-     */
-    private static final String[] READ_ONLY_PATRON_FIELDS = {
-        "patron_id",            // PK, asignado por Koha
-        "anonymized",           // gestionado por procesos de privacidad
-        "expired",              // calculado: expiry_date < today
-        "restricted",           // calculado: debarred activo
-        "last_seen",            // auto-actualizado en login
-        "updated_on",           // timestamp auto-actualizado
-        "date_renewed",         // auto-actualizado en renovación
-        "extended_attributes",  // endpoint separado /extended_attributes
-        "overdrive_auth_token", // token externo, read-only
-        "primary_contact_method", // calculado
-        "checkouts_count",      // calculado
-        "overdues_count",       // calculado
-        "holds_count",          // calculado
-        "account_balance"       // calculado
-    };
 
     /** GET basico de patron sin embed de extended_attributes (para uso interno en updatePatron). */
     private JSONObject getPatronBasic(String uid) throws ConnectorException, IOException {

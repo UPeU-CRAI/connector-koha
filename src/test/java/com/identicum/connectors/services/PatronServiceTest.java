@@ -90,6 +90,54 @@ public class PatronServiceTest {
         assertDoesNotThrow(() -> patronService.updatePatron("1", payload));
     }
 
+    /**
+     * Regresion del HTTP 500 determinista (v1.3.12): el GET de Koha devuelve campos
+     * calculados que NO pertenecen al schema escribible (p.ej. self_renewal_available).
+     * El schema patron.yaml declara additionalProperties:false, asi que reenviarlos en
+     * el PUT provoca Koha::Exceptions::Object::PropertyNotFound -> 500. El PUT debe
+     * incluir SOLO campos de la allowlist escribible; los calculados deben quedar fuera.
+     */
+    @Test
+    void testUpdatePatronExcludesCalculatedFieldsFromPut() throws Exception {
+        // GET devuelve un patron con campos calculados/no-escribibles mezclados.
+        String getBody = "{\"patron_id\":1,\"userid\":\"jdoe\",\"surname\":\"Doe\","
+                + "\"library_id\":\"MAIN\",\"cardnumber\":\"C1\",\"category_id\":\"S\","
+                + "\"self_renewal_available\":true,\"check_previous_checkout\":\"inherit\","
+                + "\"expired\":false,\"restricted\":false,\"anonymized\":false,"
+                + "\"updated_on\":\"2026-06-14T00:00:00+00:00\"}";
+        CloseableHttpResponse getResp = prepareResponse(200, getBody);
+        CloseableHttpResponse putResp = prepareResponse(200, "{}");
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(getResp);
+
+        final JSONObject[] putBody = new JSONObject[1];
+        when(httpClient.execute(any(HttpPut.class))).thenAnswer(invocation -> {
+            HttpPut put = invocation.getArgument(0);
+            org.apache.http.HttpEntity ent = ((org.apache.http.client.methods.HttpEntityEnclosingRequestBase) put).getEntity();
+            String s = new String(ent.getContent().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            putBody[0] = new JSONObject(s);
+            return putResp;
+        });
+
+        JSONObject payload = new JSONObject().put("statistics_2", "31300211");
+        patronService.updatePatron("1", payload);
+
+        assertNotNull(putBody[0], "PUT body should have been captured");
+        // Campos calculados / no escribibles NUNCA deben ir en el PUT.
+        assertFalse(putBody[0].has("self_renewal_available"), "self_renewal_available debe excluirse del PUT");
+        assertFalse(putBody[0].has("check_previous_checkout"), "check_previous_checkout debe excluirse del PUT");
+        assertFalse(putBody[0].has("expired"), "expired (readOnly) debe excluirse del PUT");
+        assertFalse(putBody[0].has("restricted"), "restricted (readOnly) debe excluirse del PUT");
+        assertFalse(putBody[0].has("anonymized"), "anonymized (readOnly) debe excluirse del PUT");
+        assertFalse(putBody[0].has("updated_on"), "updated_on (no updateable) debe excluirse del PUT");
+        // El delta y los campos obligatorios escribibles SI deben ir.
+        assertEquals("31300211", putBody[0].getString("statistics_2"), "el delta statistics_2 debe enviarse");
+        assertEquals("MAIN", putBody[0].getString("library_id"), "campo obligatorio library_id debe enviarse");
+        assertEquals("Doe", putBody[0].getString("surname"), "campo obligatorio surname debe enviarse");
+        assertEquals("C1", putBody[0].getString("cardnumber"), "cardnumber debe enviarse");
+        assertEquals("S", putBody[0].getString("category_id"), "category_id debe enviarse");
+        assertEquals("jdoe", putBody[0].getString("userid"), "userid debe enviarse");
+    }
+
     @Test
     void testGetPatronSendsXKohaEmbedHeader() throws Exception {
         CloseableHttpResponse resp = prepareResponse(200, "{\"patron_id\":1,\"userid\":\"jdoe\"}");

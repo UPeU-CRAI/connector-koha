@@ -164,6 +164,40 @@ public class PatronMapper extends BaseMapper {
     }
 
     /**
+     * Conjunto ALLOWLIST de campos nativos de Koha que el conector puede ENVIAR en el
+     * cuerpo de un PUT /patrons/{id}. Se deriva de {@link #ATTRIBUTE_METADATA_MAP}:
+     * incluye todo campo conocido por el conector que sea actualizable
+     * ({@code !isNotUpdateable()}), EXCLUYE los canales no-REST (photo / photo_mimetype)
+     * y EXCLUYE extended_attributes (van por su endpoint dedicado).
+     *
+     * <p>MOTIVO (v1.3.12) — fix del HTTP 500 determinista en UPDATE: el GET de un patron
+     * en Koha 24.05+/25.05/26.05 devuelve campos CALCULADOS que NO pertenecen al schema
+     * escribible (p.ej. {@code self_renewal_available}). El schema patron.yaml declara
+     * {@code additionalProperties: false}, por lo que reenviar CUALQUIER campo ajeno al
+     * schema en el PUT provoca {@code Koha::Exceptions::Object::PropertyNotFound}
+     * (&lt;&lt;No property X for Koha::Patron&gt;&gt;) -> HTTP 500. El antiguo enfoque de
+     * read-modify-write con DENYLIST de campos read-only era fragil: cada nuevo campo
+     * calculado que Koha agregue al GET rompe el PUT. Una ALLOWLIST construida desde el
+     * propio mapeo del conector es robusta ante cambios de version de Koha.</p>
+     */
+    public static java.util.Set<String> getWritablePatronNativeFields() {
+        java.util.Set<String> writable = new HashSet<>();
+        for (AttributeMetadata meta : ATTRIBUTE_METADATA_MAP.values()) {
+            if (meta.isNotUpdateable()) {
+                continue;
+            }
+            String nativeName = meta.getKohaNativeName();
+            // Canales que NO viajan por REST / van por endpoint dedicado.
+            if ("photo".equals(nativeName) || "photo_mimetype".equals(nativeName)
+                    || "extended_attributes".equals(nativeName)) {
+                continue;
+            }
+            writable.add(nativeName);
+        }
+        return writable;
+    }
+
+    /**
      * Construye un objeto JSON para un Patrón a partir de atributos de ConnId.
      */
     public JSONObject buildPatronJson(Set<Attribute> attributes, boolean isCreate) {
