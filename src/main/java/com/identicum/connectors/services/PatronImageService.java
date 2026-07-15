@@ -23,7 +23,7 @@ import java.util.Set;
  * por eso este conector es hibrido: REST para los ~48 atributos del patron,
  * y este canal JDBC <strong>exclusivamente</strong> para la foto.</p>
  *
- * <p>Esquema real de la tabla (capturado de Koha PROD {@code koha_bul}):</p>
+ * <p>Esquema real de la tabla (capturado de Koha PROD {@code koha_upeu}):</p>
  * <pre>
  * CREATE TABLE patronimage (
  *   borrowernumber int(11) NOT NULL,

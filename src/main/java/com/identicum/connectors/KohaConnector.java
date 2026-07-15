@@ -203,32 +203,10 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 			LOG.ok("Create para ObjectClass {0} completado. Uid: {1}", oClass, newUidValue);
 			return new Uid(newUidValue);
 		} catch (AlreadyExistsException e) {
-			// 3er fallback: el conflicto puede ser por el atributo extendido DNI (unique_id=1 en Koha).
-			// La búsqueda REST por cardnumber/userid no encuentra nada porque el patron existe con
-			// diferente cardnumber/userid pero el mismo DNI como extended_attribute.
-			if (ObjectClass.ACCOUNT.is(oClass.getObjectClassValue()) && jdbcConnectionProvider != null) {
-				try {
-					JSONObject tmpPayload = patronMapper.buildPatronJson(attrs, true);
-					// v1.3.10: el DNI real viaja en el extended_attribute type=DNI, NO en userid.
-					// Para estudiantes userid=codigo universitario (codigo != DNI), por lo que el
-					// fallback v1.3.8 buscaba borrower_attributes.attribute=codigo y nunca matcheaba.
-					String dniValue = extractDniFromExtendedAttributes(tmpPayload);
-					if (StringUtil.isBlank(dniValue)) {
-						dniValue = tmpPayload.optString("userid", null);
-					}
-					if (StringUtil.isNotBlank(dniValue)) {
-						LOG.info("CREATE 409 — fallback JDBC por DNI extended_attribute={0}", dniValue);
-						String borrowerNo = findBorrowerByDniJdbc(dniValue);
-						if (borrowerNo != null) {
-							LOG.ok("CREATE 409 — Patron recuperado via JDBC DNI={0}, borrowernumber={1}. Idempotente.", dniValue, borrowerNo);
-							return new Uid(borrowerNo);
-						}
-						LOG.warn("CREATE 409 — JDBC DNI={0}: no encontrado en borrower_attributes. 409 irrecuperable.", dniValue);
-					}
-				} catch (Exception ex2) {
-					LOG.warn("CREATE 409 — JDBC DNI fallback lanzó excepcion: {0}", ex2.getMessage());
-				}
-			}
+			// La idempotencia del 409 se resuelve 100% por REST en PatronService.createPatron
+			// (colisiones de campos unicos: cardnumber -> userid -> email). Con arranque de cero
+			// y cardnumber=ID_PERSONA (unico e inmutable) la correlacion limpia por cardnumber
+			// es suficiente; ya no hay adopt-by-DNI legacy (D-14).
 			LOG.error(e, "Error AlreadyExistsException irrecuperable en Create para ObjectClass {0}", oClass.getObjectClassValue());
 			throw e;
 		} catch (ConnectorException e) { // Catch specific ConnectorExceptions first
@@ -616,77 +594,6 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 	 * @param fetchPhoto true si se debe leer la foto
 	 * @return el objeto, enriquecido con la foto si corresponde
 	 */
-	/**
-	 * Busca el borrowernumber de un patron en Koha por el atributo extendido DNI,
-	 * directamente en la BD via JDBC. El endpoint REST no expone búsqueda por
-	 * extended_attributes, pero la BD koha_bul.borrower_attributes sí.
-	 *
-	 * Se usa como 3er fallback en create() cuando Koha devuelve 409 y la búsqueda
-	 * REST por cardnumber y userid no encuentra el patron (conflicto por DNI único).
-	 *
-	 * @param dniValue valor del DNI REAL a buscar (extraido del extended_attribute type=DNI)
-	 * @return borrowernumber como String, o null si no encontrado o JDBC no disponible
-	 */
-	private String findBorrowerByDniJdbc(String dniValue) {
-		if (jdbcConnectionProvider == null || StringUtil.isBlank(dniValue)) {
-			return null;
-		}
-		java.sql.Connection conn = null;
-		java.sql.PreparedStatement ps = null;
-		java.sql.ResultSet rs = null;
-		try {
-			conn = jdbcConnectionProvider.getConnection();
-			ps = conn.prepareStatement(
-					"SELECT borrowernumber FROM borrower_attributes WHERE code='DNI' AND attribute=? LIMIT 1");
-			ps.setString(1, dniValue);
-			rs = ps.executeQuery();
-			if (rs.next()) {
-				return String.valueOf(rs.getInt("borrowernumber"));
-			}
-			return null;
-		} catch (Exception ex) {
-			LOG.warn("JDBC búsqueda por DNI={0} en borrower_attributes falló: {1}", dniValue, ex.getMessage());
-			return null;
-		} finally {
-			if (rs != null) try { rs.close(); } catch (Exception ignore) {}
-			if (ps != null) try { ps.close(); } catch (Exception ignore) {}
-			if (conn != null) try { conn.close(); } catch (Exception ignore) {}
-		}
-	}
-
-	/**
-	 * Extrae el valor del atributo extendido DNI del payload Koha (v1.3.10).
-	 * El payload trae extended_attributes como JSONArray de {"type":"DNI","value":"<dni>"}.
-	 * Para estudiantes el DNI real != userid (codigo universitario), por lo que el fallback
-	 * JDBC debe buscar por este valor y no por userid.
-	 *
-	 * @param payload payload Koha construido por PatronMapper.buildPatronJson
-	 * @return el valor del DNI, o null si no esta presente
-	 */
-	private String extractDniFromExtendedAttributes(JSONObject payload) {
-		if (payload == null) {
-			return null;
-		}
-		Object raw = payload.opt("extended_attributes");
-		if (!(raw instanceof org.json.JSONArray)) {
-			return null;
-		}
-		org.json.JSONArray arr = (org.json.JSONArray) raw;
-		for (int i = 0; i < arr.length(); i++) {
-			JSONObject attr = arr.optJSONObject(i);
-			if (attr == null) {
-				continue;
-			}
-			if ("DNI".equals(attr.optString("type", null))) {
-				String value = attr.optString("value", null);
-				if (StringUtil.isNotBlank(value)) {
-					return value;
-				}
-			}
-		}
-		return null;
-	}
-
 	private ConnectorObject enrichWithPhoto(ConnectorObject co, boolean fetchPhoto) {
 		if (co == null || !fetchPhoto) {
 			return co;

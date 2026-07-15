@@ -67,11 +67,10 @@ public class PatronService extends AbstractKohaService {
      *
      * Koha devuelve 409 ("A patron record matching these details already exists")
      * cuando colisiona CUALQUIER campo unico: cardnumber, userid O email
-     * (borrowers.email tiene constraint unico en esta instancia). En el onboarding
-     * canonico UPeU el borrower huerfano arrastra identificadores LEGACY (cardnumber=DNI,
-     * userid basado en nombre) distintos a los CANONICOS que envia MidPoint (cardnumber=codigo,
-     * userid=codigo); el unico campo que comparten es el email institucional. Por eso el
-     * adopt por email es imprescindible ademas de cardnumber/userid.
+     * (borrowers.email tiene constraint unico en esta instancia). Por eso se intenta
+     * la adopcion idempotente por cada uno de esos campos, en ese orden. Con arranque
+     * de cero y cardnumber=ID_PERSONA (unico e inmutable) la correlacion por cardnumber
+     * es la via principal; userid y email cubren colisiones legitimas de campos unicos.
      *
      * Todas las busquedas usan _match=exact para garantizar adopcion 1:1 y evitar
      * adoptar al borrower equivocado por coincidencia parcial (Koha por defecto hace
@@ -125,73 +124,9 @@ public class PatronService extends AbstractKohaService {
                 LOG.warn("No encontrado por email={0} tampoco.", email);
             }
 
-            // Fallback adopt por DNI (v1.3.10). El conflicto 409 puede deberse al atributo
-            // extendido DNI (borrower_attribute_types.code='DNI', unique_id=1) y NO a
-            // cardnumber/userid/email. En el universo de huerfanos legacy UPeU el borrower
-            // arrastra cardnumber=DNI (patron confirmado en koha_bul: 967 borrowers con
-            // cardnumber == su atributo DNI), mientras MidPoint envia cardnumber=codigo
-            // universitario (codigo != DNI para estudiantes) + el DNI real dentro de
-            // extended_attributes. Por eso el lookup correcto es por el DNI REAL extraido
-            // del extended_attribute type=DNI, NO por el codigo (userid).
-            //
-            // Lookup 100% REST por cardnumber=DNI con _match=exact -> resuelve el borrower
-            // legacy y lo adopta idempotentemente. Funciona aunque el canal JDBC este
-            // deshabilitado. El fallback JDBC en KohaConnector queda como 2da barrera.
-            String dni = extractExtendedAttributeValue(payload, "DNI");
-            if (dni != null && !dni.isEmpty()) {
-                String canonicalCardnumber = payload.optString("cardnumber", null);
-                // Evita lookup redundante si el cardnumber canonico ya ES el DNI (ya probado arriba).
-                if (canonicalCardnumber == null || !dni.equals(canonicalCardnumber)) {
-                    LOG.info("CREATE patron 409: buscando por DNI extended_attribute (cardnumber legacy=DNI={0}).", dni);
-                    JSONObject existing = findPatronExact("cardnumber", dni);
-                    if (existing != null && existing.has("patron_id")) {
-                        LOG.ok("Patron encontrado via DNI={0} (cardnumber legacy), patron_id={1}. Operacion idempotente.",
-                                dni, existing.get("patron_id"));
-                        return existing;
-                    }
-                    LOG.info("No encontrado por cardnumber=DNI={0}.", dni);
-                }
-            } else {
-                LOG.info("CREATE patron 409: el payload no trae extended_attribute DNI; se omite adopt por DNI.");
-            }
-
-            LOG.warn("CREATE patron 409: no se pudo recuperar patron existente por cardnumber, userid, email ni DNI. "
-                    + "Se intentara fallback JDBC en KohaConnector. Relanzando.");
+            LOG.warn("CREATE patron 409: no se pudo recuperar patron existente por cardnumber, userid ni email. Relanzando.");
             throw e;
         }
-    }
-
-    /**
-     * Extrae el valor de un atributo extendido de Koha del payload por su tipo (code).
-     * El payload de MidPoint trae extended_attributes como JSONArray de objetos
-     * {"type":"DNI","value":"<dni>"} (ver PatronMapper.convertExtendedAttributesToKoha).
-     *
-     * @param payload payload del create
-     * @param type    code del atributo extendido (ej. "DNI")
-     * @return el primer valor encontrado para ese type, o null si no existe / vacio
-     */
-    private String extractExtendedAttributeValue(JSONObject payload, String type) {
-        if (payload == null || type == null) {
-            return null;
-        }
-        Object raw = payload.opt("extended_attributes");
-        if (!(raw instanceof JSONArray)) {
-            return null;
-        }
-        JSONArray arr = (JSONArray) raw;
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject attr = arr.optJSONObject(i);
-            if (attr == null) {
-                continue;
-            }
-            if (type.equals(attr.optString("type", null))) {
-                String value = attr.optString("value", null);
-                if (value != null && !value.isEmpty()) {
-                    return value;
-                }
-            }
-        }
-        return null;
     }
 
     /**
@@ -317,7 +252,7 @@ public class PatronService extends AbstractKohaService {
      * Un type ajeno (no enviado nunca) se conserva intacto.</p>
      *
      * <p>El formato de cada entrada enviada a Koha es {@code {"type":X,"value":Y}}.
-     * Compatible con {@code convertExtendedAttributesToKoha} y con el adopt-by-DNI.</p>
+     * Compatible con {@code convertExtendedAttributesToKoha}.</p>
      *
      * @param uid            patron_id (borrowernumber)
      * @param desiredEntries valores deseados que envia MidPoint, como JSONArray de
