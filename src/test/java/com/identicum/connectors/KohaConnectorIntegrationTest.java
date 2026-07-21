@@ -2,6 +2,7 @@ package com.identicum.connectors;
 
 import com.identicum.connectors.services.CategoryService;
 import com.identicum.connectors.services.PatronService;
+import com.identicum.connectors.services.PatronPermissionService;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.exceptions.ConnectorIOException;
 import org.identityconnectors.framework.common.objects.Attribute;
@@ -38,6 +39,8 @@ public class KohaConnectorIntegrationTest {
     private PatronService patronService;
     @Mock
     private CategoryService categoryService;
+    @Mock
+    private PatronPermissionService patronPermissionService;
 
     @Mock
     private KohaConfiguration configuration;
@@ -165,6 +168,56 @@ public class KohaConnectorIntegrationTest {
         assertNotNull(result);
         assertEquals("10", result.getUidValue());
         verify(patronService, times(1)).updatePatron(eq("10"), any(JSONObject.class));
+    }
+
+    @Test
+    void update_flagsUsesManagedJdbcChannelOnly() throws Exception {
+        Set<Attribute> attrs = new HashSet<>();
+        attrs.add(AttributeBuilder.build("flags", 1));
+
+        Uid result = connector.update(ObjectClass.ACCOUNT, new Uid("16198"), attrs,
+                new OperationOptionsBuilder().build());
+
+        assertEquals("16198", result.getUidValue());
+        verify(patronPermissionService).updateFlags("16198", 1);
+        verify(patronService, never()).updatePatron(anyString(), any(JSONObject.class));
+    }
+
+    @Test
+    void create_appliesFlagsAfterRestCreatesBorrowernumber() throws Exception {
+        when(patronService.createPatron(any(JSONObject.class)))
+                .thenReturn(new JSONObject().put("patron_id", 16198));
+        Set<Attribute> attrs = new HashSet<>();
+        attrs.add(AttributeBuilder.build("userid", "9610165"));
+        attrs.add(AttributeBuilder.build("cardnumber", "15922"));
+        attrs.add(AttributeBuilder.build("surname", "Sanchez"));
+        attrs.add(AttributeBuilder.build("library_id", "BUL"));
+        attrs.add(AttributeBuilder.build("category_id", "LOCAL"));
+        attrs.add(AttributeBuilder.build("flags", 1));
+
+        connector.create(ObjectClass.ACCOUNT, attrs, new OperationOptionsBuilder().build());
+
+        verify(patronPermissionService).updateFlags("16198", 1);
+    }
+
+    @Test
+    void executeQueryReturnsFlagsOnlyWhenExplicitlyRequested() throws Exception {
+        when(patronService.getPatron("16198")).thenReturn(new JSONObject()
+                .put("patron_id", 16198)
+                .put("userid", "9610165")
+                .put("surname", "Sanchez"));
+        when(patronPermissionService.getFlags("16198")).thenReturn(1);
+        KohaFilter filter = new KohaFilter();
+        filter.setByUid("16198");
+        List<Integer> flags = new ArrayList<>();
+
+        connector.executeQuery(ObjectClass.ACCOUNT, filter, co -> {
+            flags.add((Integer) co.getAttributeByName("flags").getValue().get(0));
+            return true;
+        }, new OperationOptionsBuilder().setAttributesToGet("flags").build());
+
+        assertEquals(java.util.Collections.singletonList(1), flags);
+        verify(patronPermissionService).getFlags("16198");
     }
 
     @Test

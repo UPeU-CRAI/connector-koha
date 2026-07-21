@@ -251,4 +251,29 @@ public class PatronMapperTest {
         assertTrue(mimeMeta.isNotReturnedByDefault(),
                 "'photo_mimetype' debe tener returnedByDefault=false.");
     }
+
+    @Test
+    void testFlagsAttributeRegisteredAsJdbcInteger() {
+        AttributeMetadata flagsMeta = PatronMapper.ATTRIBUTE_METADATA_MAP.get(PatronMapper.ATTR_FLAGS);
+
+        assertNotNull(flagsMeta, "El atributo JDBC 'flags' debe estar registrado.");
+        assertEquals(Integer.class, flagsMeta.getType(), "'flags' debe ser Integer.");
+        assertTrue(flagsMeta.isNotReturnedByDefault(),
+                "'flags' solo debe consultarse cuando MidPoint lo pida expresamente.");
+        assertFalse(flagsMeta.isNotCreatable(), "'flags' debe poder provisionarse al crear.");
+        assertFalse(flagsMeta.isNotUpdateable(), "'flags' debe poder actualizarse.");
+    }
+
+    @Test
+    void testBuildPatronJsonExcludesFlagsFromRestPayload() {
+        Set<Attribute> attrs = buildSampleAttributesForCreate();
+        attrs.add(AttributeBuilder.build(PatronMapper.ATTR_FLAGS, 1));
+
+        JSONObject json = patronMapper.buildPatronJson(attrs, true);
+
+        assertFalse(json.has(PatronMapper.ATTR_FLAGS),
+                "Koha REST no admite 'flags'; debe viajar solo por el canal JDBC gestionado.");
+        assertFalse(PatronMapper.getWritablePatronNativeFields().contains(PatronMapper.ATTR_FLAGS),
+                "La allowlist REST no debe incluir 'flags'.");
+    }
 }
