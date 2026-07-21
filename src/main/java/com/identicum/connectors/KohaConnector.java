@@ -194,7 +194,7 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 				}
 				// Los permisos son autorizacion: si fueron solicitados deben persistirse
 				// o la operacion falla; nunca se informa un falso exito a MidPoint.
-				applyFlagsFromAttributes(newUidValue, attrs);
+				applyAuthorizationFromAttributes(newUidValue, attrs);
 				// La foto se escribe DESPUES del POST REST (best-effort: no abortar si falla).
 				try {
 					applyPhotoFromAttributes(newUidValue, attrs);
@@ -264,7 +264,7 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 							uid.getUidValue(), extAttrs.length());
 					patronService.replaceExtendedAttributes(uid.getUidValue(), extAttrs);
 				}
-				applyFlagsFromAttributes(uid.getUidValue(), attrs);
+				applyAuthorizationFromAttributes(uid.getUidValue(), attrs);
 				// La foto se procesa por el canal JDBC (best-effort: no abortar si falla).
 				try {
 					applyPhotoFromAttributes(uid.getUidValue(), attrs);
@@ -331,12 +331,13 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 				// attributesToGet. Nunca un SELECT de blob por fila en busquedas masivas.
 				boolean fetchPhoto = isPhotoRequested(options);
 				boolean fetchFlags = isFlagsRequested(options);
+				boolean fetchPermissions = isPermissionsRequested(options);
 				if (filter != null && filter.getByUid() != null) {
 					JSONObject patronJson = patronService.getPatron(filter.getByUid());
 					if (patronJson != null && patronJson.length() > 0) { // Check if patronJson is not null or empty
 						ConnectorObject co = patronMapper.convertJsonToPatronObject(patronJson);
 						co = enrichWithPhoto(co, fetchPhoto);
-						co = enrichWithFlags(co, fetchFlags);
+						co = enrichWithAuthorization(co, fetchFlags, fetchPermissions);
 						if (co != null) handler.handle(co);
 						LOG.info("Resultados de búsqueda por UID para {0}: 1", oClass);
 					} else {
@@ -346,7 +347,7 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 					patronService.searchPatrons(filter, options, patronJson -> {
 						ConnectorObject co = patronMapper.convertJsonToPatronObject(patronJson);
 						co = enrichWithPhoto(co, fetchPhoto);
-						co = enrichWithFlags(co, fetchFlags);
+						co = enrichWithAuthorization(co, fetchFlags, fetchPermissions);
 						return co == null || handler.handle(co);
 					});
 				}
@@ -608,12 +609,25 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 		return false;
 	}
 
-	private void applyFlagsFromAttributes(String borrowernumber, Set<Attribute> attrs) {
+	private boolean isPermissionsRequested(OperationOptions options) {
+		if (options == null || options.getAttributesToGet() == null) {
+			return false;
+		}
+		for (String attr : options.getAttributesToGet()) {
+			if (PatronMapper.ATTR_USER_PERMISSIONS.equals(attr)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void applyAuthorizationFromAttributes(String borrowernumber, Set<Attribute> attrs) {
 		if (attrs == null) {
 			return;
 		}
 		Attribute flagsAttr = AttributeUtil.find(PatronMapper.ATTR_FLAGS, attrs);
-		if (flagsAttr == null) {
+		Attribute permissionsAttr = AttributeUtil.find(PatronMapper.ATTR_USER_PERMISSIONS, attrs);
+		if (flagsAttr == null && permissionsAttr == null) {
 			return;
 		}
 		if (patronPermissionService == null) {
@@ -621,21 +635,37 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 					+ borrowernumber + " pero el canal JDBC no esta operativo.");
 		}
 		Integer flags = null;
-		java.util.List<Object> values = flagsAttr.getValue();
-		if (values != null && !values.isEmpty() && values.get(0) != null) {
-			Object value = values.get(0);
-			if (value instanceof Number) {
-				flags = ((Number) value).intValue();
-			} else {
-				try {
-					flags = Integer.valueOf(String.valueOf(value));
-				} catch (NumberFormatException e) {
-					throw new org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException(
-							"El atributo 'flags' debe ser Integer. Valor: " + value, e);
+		if (flagsAttr != null) {
+			java.util.List<Object> values = flagsAttr.getValue();
+			if (values != null && !values.isEmpty() && values.get(0) != null) {
+				Object value = values.get(0);
+				if (value instanceof Number) {
+					flags = ((Number) value).intValue();
+				} else {
+					try {
+						flags = Integer.valueOf(String.valueOf(value));
+					} catch (NumberFormatException e) {
+						throw new org.identityconnectors.framework.common.exceptions.InvalidAttributeValueException(
+								"El atributo 'flags' debe ser Integer. Valor: " + value, e);
+					}
 				}
 			}
 		}
-		patronPermissionService.updateFlags(borrowernumber, flags);
+		if (permissionsAttr == null) {
+			patronPermissionService.updateFlags(borrowernumber, flags);
+			return;
+		}
+		java.util.Set<String> permissions = new java.util.LinkedHashSet<>();
+		java.util.List<Object> permissionValues = permissionsAttr.getValue();
+		if (permissionValues != null) {
+			for (Object value : permissionValues) {
+				if (value != null) permissions.add(String.valueOf(value));
+			}
+		}
+		if (flagsAttr == null) {
+			flags = patronPermissionService.getFlags(borrowernumber);
+		}
+		patronPermissionService.replaceAuthorization(borrowernumber, flags, permissions);
 	}
 
 	/**
@@ -672,21 +702,25 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 		return builder.build();
 	}
 
-	private ConnectorObject enrichWithFlags(ConnectorObject co, boolean fetchFlags) {
-		if (co == null || !fetchFlags) {
+	private ConnectorObject enrichWithAuthorization(ConnectorObject co, boolean fetchFlags, boolean fetchPermissions) {
+		if (co == null || (!fetchFlags && !fetchPermissions)) {
 			return co;
 		}
 		if (patronPermissionService == null) {
 			throw new ConnectorIOException("MidPoint solicito borrowers.flags pero el canal JDBC no esta operativo.");
 		}
-		Integer flags = patronPermissionService.getFlags(co.getUid().getUidValue());
-		if (flags == null) {
-			return co;
-		}
 		ConnectorObjectBuilder builder = new ConnectorObjectBuilder();
 		builder.setObjectClass(co.getObjectClass());
 		builder.addAttributes(co.getAttributes());
-		builder.addAttribute(AttributeBuilder.build(PatronMapper.ATTR_FLAGS, flags));
+		if (fetchFlags) {
+			Integer flags = patronPermissionService.getFlags(co.getUid().getUidValue());
+			if (flags != null) builder.addAttribute(AttributeBuilder.build(PatronMapper.ATTR_FLAGS, flags));
+		}
+		if (fetchPermissions) {
+			java.util.Set<String> permissions = patronPermissionService.getPermissions(co.getUid().getUidValue());
+			builder.addAttribute(AttributeBuilder.build(PatronMapper.ATTR_USER_PERMISSIONS,
+					permissions.toArray(new String[0])));
+		}
 		return builder.build();
 	}
 }

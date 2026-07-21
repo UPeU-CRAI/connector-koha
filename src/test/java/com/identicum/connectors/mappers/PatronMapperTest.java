@@ -265,6 +265,18 @@ public class PatronMapperTest {
     }
 
     @Test
+    void testUserPermissionsAttributeRegisteredAsJdbcMultivaluedString() {
+        AttributeMetadata permissionsMeta = PatronMapper.ATTRIBUTE_METADATA_MAP.get(PatronMapper.ATTR_USER_PERMISSIONS);
+
+        assertNotNull(permissionsMeta, "El atributo JDBC 'user_permissions' debe estar registrado.");
+        assertEquals(String.class, permissionsMeta.getType());
+        assertTrue(permissionsMeta.isMultivalued());
+        assertTrue(permissionsMeta.isNotReturnedByDefault());
+        assertFalse(permissionsMeta.isNotCreatable());
+        assertFalse(permissionsMeta.isNotUpdateable());
+    }
+
+    @Test
     void testBuildPatronJsonExcludesFlagsFromRestPayload() {
         Set<Attribute> attrs = buildSampleAttributesForCreate();
         attrs.add(AttributeBuilder.build(PatronMapper.ATTR_FLAGS, 1));

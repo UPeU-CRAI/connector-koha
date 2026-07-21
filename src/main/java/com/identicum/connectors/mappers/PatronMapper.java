@@ -55,6 +55,9 @@ public class PatronMapper extends BaseMapper {
      */
     public static final String ATTR_FLAGS = "flags";
 
+    /** Permisos granulares Koha en formato multivaluado module_bit:code. */
+    public static final String ATTR_USER_PERMISSIONS = "user_permissions";
+
     static {
         final String ATTR_USERID = "userid";
         final String ATTR_CARDNUMBER = "cardnumber";
@@ -170,6 +173,9 @@ public class PatronMapper extends BaseMapper {
                 new AttributeMetadata(ATTR_PHOTO_MIMETYPE, "photo_mimetype", String.class, AttributeMetadata.Flags.NOT_RETURNED_BY_DEFAULT));
         ATTRIBUTE_METADATA_MAP.put(ATTR_FLAGS,
                 new AttributeMetadata(ATTR_FLAGS, "flags", Integer.class, AttributeMetadata.Flags.NOT_RETURNED_BY_DEFAULT));
+        ATTRIBUTE_METADATA_MAP.put(ATTR_USER_PERMISSIONS,
+                new AttributeMetadata(ATTR_USER_PERMISSIONS, ATTR_USER_PERMISSIONS, String.class,
+                        AttributeMetadata.Flags.MULTIVALUED, AttributeMetadata.Flags.NOT_RETURNED_BY_DEFAULT));
     }
 
     /**
@@ -198,7 +204,7 @@ public class PatronMapper extends BaseMapper {
             String nativeName = meta.getKohaNativeName();
             // Canales que NO viajan por REST / van por endpoint dedicado.
             if ("photo".equals(nativeName) || "photo_mimetype".equals(nativeName)
-                    || ATTR_FLAGS.equals(nativeName)
+                    || ATTR_FLAGS.equals(nativeName) || ATTR_USER_PERMISSIONS.equals(nativeName)
                     || "extended_attributes".equals(nativeName)) {
                 continue;
             }
@@ -226,7 +232,7 @@ public class PatronMapper extends BaseMapper {
             // La foto del patron NO viaja por REST: se provisiona via canal JDBC
             // (tabla patronimage). El conector la procesa en una rama dedicada.
             if (ATTR_PHOTO.equals(connIdAttrName) || ATTR_PHOTO_MIMETYPE.equals(connIdAttrName)
-                    || ATTR_FLAGS.equals(connIdAttrName)) {
+                    || ATTR_FLAGS.equals(connIdAttrName) || ATTR_USER_PERMISSIONS.equals(connIdAttrName)) {
                 LOG.ok("Excluyendo del payload REST el atributo JDBC '{0}'.", connIdAttrName);
                 continue;
             }
@@ -325,7 +331,8 @@ public class PatronMapper extends BaseMapper {
             // La foto del patron no proviene del JSON REST; la lee el conector
             // via canal JDBC solo cuando MidPoint la solicita explicitamente.
             if (ATTR_PHOTO.equals(meta.getConnIdName()) || ATTR_PHOTO_MIMETYPE.equals(meta.getConnIdName())
-                    || ATTR_FLAGS.equals(meta.getConnIdName())) {
+                    || ATTR_FLAGS.equals(meta.getConnIdName())
+                    || ATTR_USER_PERMISSIONS.equals(meta.getConnIdName())) {
                 continue;
             }
 

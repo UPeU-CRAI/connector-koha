@@ -184,6 +184,21 @@ public class KohaConnectorIntegrationTest {
     }
 
     @Test
+    void updateAuthorizationUsesSingleTransactionalJdbcCall() throws Exception {
+        Set<Attribute> attrs = new HashSet<>();
+        attrs.add(AttributeBuilder.build("flags", 4));
+        attrs.add(AttributeBuilder.build("user_permissions",
+                "1:circulate_remaining_permissions", "4:edit_borrowers", "4:list_borrowers"));
+
+        Uid result = connector.update(ObjectClass.ACCOUNT, new Uid("16198"), attrs,
+                new OperationOptionsBuilder().build());
+
+        assertEquals("16198", result.getUidValue());
+        verify(patronPermissionService).replaceAuthorization(eq("16198"), eq(4), anySet());
+        verify(patronService, never()).updatePatron(anyString(), any(JSONObject.class));
+    }
+
+    @Test
     void create_appliesFlagsAfterRestCreatesBorrowernumber() throws Exception {
         when(patronService.createPatron(any(JSONObject.class)))
                 .thenReturn(new JSONObject().put("patron_id", 16198));
