@@ -278,6 +278,11 @@ public class PatronService extends AbstractKohaService {
 
         // 2) GET actuales y preservar los types NO gobernados (tolerados ajenos al flujo).
         JSONArray finalSet = new JSONArray();
+        // ConnId puede entregar el mismo valor más de una vez al descomponer un delta
+        // ADD/DELETE multivaluado. Koha rechaza duplicados idénticos para tipos no
+        // repetibles antes de completar el overwrite. Se deduplica por (type,value),
+        // conservando valores distintos de tipos legítimamente repetibles.
+        java.util.Set<String> emittedEntries = new java.util.LinkedHashSet<>();
         JSONObject current = getPatron(uid);
         Object rawCurrent = current.opt("extended_attributes");
         if (rawCurrent instanceof JSONArray) {
@@ -293,7 +298,10 @@ public class PatronService extends AbstractKohaService {
                     JSONObject preserved = new JSONObject();
                     preserved.put("type", t);
                     preserved.put("value", e.optString("value", ""));
-                    finalSet.put(preserved);
+                    String value = e.optString("value", "");
+                    if (emittedEntries.add(t + "\u0000" + value)) {
+                        finalSet.put(preserved);
+                    }
                 }
             }
         }
@@ -306,8 +314,11 @@ public class PatronService extends AbstractKohaService {
             if (t == null || t.isEmpty()) continue;
             JSONObject entry = new JSONObject();
             entry.put("type", t);
-            entry.put("value", e.optString("value", ""));
-            finalSet.put(entry);
+            String value = e.optString("value", "");
+            entry.put("value", value);
+            if (emittedEntries.add(t + "\u0000" + value)) {
+                finalSet.put(entry);
+            }
         }
 
         // 4) PUT overwrite-all al endpoint dedicado. El cuerpo es el ARRAY directo.

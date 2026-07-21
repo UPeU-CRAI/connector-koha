@@ -412,4 +412,38 @@ public class PatronServiceTest {
         assertEquals(1, sent.length());
         assertEquals("DNI", sent.getJSONObject(0).getString("type"));
     }
+
+    @Test
+    void testReplaceExtendedAttributes_deduplicatesIdenticalDesiredEntries() throws Exception {
+        String currentBody = "{\"patron_id\":99,\"extended_attributes\":["
+                + "{\"type\":\"CRAI_TIER\",\"value\":\"supervision\"},"
+                + "{\"type\":\"DNI\",\"value\":\"12345678\"}]}";
+        CloseableHttpResponse getResp = prepareResponse(200, currentBody);
+        CloseableHttpResponse putResp = prepareResponse(200, "[]");
+        when(httpClient.execute(any(HttpGet.class))).thenReturn(getResp);
+        final HttpPut[] capturedPut = new HttpPut[1];
+        when(httpClient.execute(any(HttpPut.class))).thenAnswer(inv -> {
+            capturedPut[0] = inv.getArgument(0);
+            return putResp;
+        });
+
+        JSONArray desired = new JSONArray()
+                .put(new JSONObject().put("type", "CRAI_TIER").put("value", "circulacion"))
+                .put(new JSONObject().put("type", "CRAI_TIER").put("value", "circulacion"));
+
+        patronService.replaceExtendedAttributes("99", desired);
+
+        String body = org.apache.http.util.EntityUtils.toString(
+                ((org.apache.http.HttpEntityEnclosingRequest) capturedPut[0]).getEntity());
+        JSONArray sent = new JSONArray(body);
+        int tierCount = 0;
+        int dniCount = 0;
+        for (int i = 0; i < sent.length(); i++) {
+            JSONObject entry = sent.getJSONObject(i);
+            if ("CRAI_TIER".equals(entry.getString("type"))) tierCount++;
+            if ("DNI".equals(entry.getString("type"))) dniCount++;
+        }
+        assertEquals(1, tierCount, "Koha rechaza duplicados idénticos en tipos no repetibles");
+        assertEquals(1, dniCount, "Los atributos ajenos deben conservarse");
+    }
 }
