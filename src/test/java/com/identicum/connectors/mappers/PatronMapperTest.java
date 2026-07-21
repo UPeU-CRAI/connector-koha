@@ -258,8 +258,12 @@ public class PatronMapperTest {
 
         assertNotNull(flagsMeta, "El atributo JDBC 'flags' debe estar registrado.");
         assertEquals(Integer.class, flagsMeta.getType(), "'flags' debe ser Integer.");
-        assertTrue(flagsMeta.isNotReturnedByDefault(),
-                "'flags' solo debe consultarse cuando MidPoint lo pida expresamente.");
+        AttributeMetadata permissionsMeta = PatronMapper.ATTRIBUTE_METADATA_MAP.get(PatronMapper.ATTR_USER_PERMISSIONS);
+        assertNotNull(permissionsMeta, "El atributo JDBC 'user_permissions' debe estar registrado.");
+        assertFalse(flagsMeta.isNotReturnedByDefault(),
+                "'flags' debe devolverse por defecto para que MidPoint pueda calcular revocaciones.");
+        assertFalse(permissionsMeta.isNotReturnedByDefault(),
+                "'user_permissions' debe devolverse por defecto para que MidPoint pueda calcular revocaciones.");
         assertFalse(flagsMeta.isNotCreatable(), "'flags' debe poder provisionarse al crear.");
         assertFalse(flagsMeta.isNotUpdateable(), "'flags' debe poder actualizarse.");
     }
@@ -271,7 +275,7 @@ public class PatronMapperTest {
         assertNotNull(permissionsMeta, "El atributo JDBC 'user_permissions' debe estar registrado.");
         assertEquals(String.class, permissionsMeta.getType());
         assertTrue(permissionsMeta.isMultivalued());
-        assertTrue(permissionsMeta.isNotReturnedByDefault());
+        assertFalse(permissionsMeta.isNotReturnedByDefault());
         assertFalse(permissionsMeta.isNotCreatable());
         assertFalse(permissionsMeta.isNotUpdateable());
     }

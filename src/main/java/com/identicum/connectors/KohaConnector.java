@@ -599,7 +599,7 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 
 	private boolean isFlagsRequested(OperationOptions options) {
 		if (options == null || options.getAttributesToGet() == null) {
-			return false;
+			return true;
 		}
 		for (String attr : options.getAttributesToGet()) {
 			if (PatronMapper.ATTR_FLAGS.equals(attr)) {
@@ -611,7 +611,7 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 
 	private boolean isPermissionsRequested(OperationOptions options) {
 		if (options == null || options.getAttributesToGet() == null) {
-			return false;
+			return true;
 		}
 		for (String attr : options.getAttributesToGet()) {
 			if (PatronMapper.ATTR_USER_PERMISSIONS.equals(attr)) {

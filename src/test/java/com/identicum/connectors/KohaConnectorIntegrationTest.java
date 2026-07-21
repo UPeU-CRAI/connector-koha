@@ -216,23 +216,29 @@ public class KohaConnectorIntegrationTest {
     }
 
     @Test
-    void executeQueryReturnsFlagsOnlyWhenExplicitlyRequested() throws Exception {
+    void executeQueryReturnsAuthorizationByDefaultForReconciliation() throws Exception {
         when(patronService.getPatron("16198")).thenReturn(new JSONObject()
                 .put("patron_id", 16198)
                 .put("userid", "9610165")
                 .put("surname", "Sanchez"));
         when(patronPermissionService.getFlags("16198")).thenReturn(1);
+        when(patronPermissionService.getPermissions("16198")).thenReturn(
+                new java.util.LinkedHashSet<>(java.util.Arrays.asList("4:edit_borrowers")));
         KohaFilter filter = new KohaFilter();
         filter.setByUid("16198");
         List<Integer> flags = new ArrayList<>();
+        List<String> permissions = new ArrayList<>();
 
         connector.executeQuery(ObjectClass.ACCOUNT, filter, co -> {
             flags.add((Integer) co.getAttributeByName("flags").getValue().get(0));
+            permissions.add((String) co.getAttributeByName("user_permissions").getValue().get(0));
             return true;
-        }, new OperationOptionsBuilder().setAttributesToGet("flags").build());
+        }, new OperationOptionsBuilder().build());
 
         assertEquals(java.util.Collections.singletonList(1), flags);
+        assertEquals(java.util.Collections.singletonList("4:edit_borrowers"), permissions);
         verify(patronPermissionService).getFlags("16198");
+        verify(patronPermissionService).getPermissions("16198");
     }
 
     @Test

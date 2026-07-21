@@ -172,10 +172,10 @@ public class PatronMapper extends BaseMapper {
         ATTRIBUTE_METADATA_MAP.put(ATTR_PHOTO_MIMETYPE,
                 new AttributeMetadata(ATTR_PHOTO_MIMETYPE, "photo_mimetype", String.class, AttributeMetadata.Flags.NOT_RETURNED_BY_DEFAULT));
         ATTRIBUTE_METADATA_MAP.put(ATTR_FLAGS,
-                new AttributeMetadata(ATTR_FLAGS, "flags", Integer.class, AttributeMetadata.Flags.NOT_RETURNED_BY_DEFAULT));
+                new AttributeMetadata(ATTR_FLAGS, "flags", Integer.class));
         ATTRIBUTE_METADATA_MAP.put(ATTR_USER_PERMISSIONS,
                 new AttributeMetadata(ATTR_USER_PERMISSIONS, ATTR_USER_PERMISSIONS, String.class,
-                        AttributeMetadata.Flags.MULTIVALUED, AttributeMetadata.Flags.NOT_RETURNED_BY_DEFAULT));
+                        AttributeMetadata.Flags.MULTIVALUED));
     }
 
     /**
