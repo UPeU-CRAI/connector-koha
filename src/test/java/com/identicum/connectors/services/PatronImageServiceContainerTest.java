@@ -43,6 +43,14 @@ class PatronImageServiceContainerTest {
     private static PatronImageService service;
     private static boolean enabled = false;
 
+    // Parametros de conexion efectivos, conservados para las pruebas que necesitan
+    // construir providers adicionales (aislamiento de pools).
+    private static String dbHost;
+    private static int dbPort;
+    private static String dbName;
+    private static String dbUser;
+    private static String dbPass;
+
     private static boolean dockerAvailable() {
         try {
             return DockerClientFactory.instance().isDockerAvailable();
@@ -109,9 +117,49 @@ class PatronImageServiceContainerTest {
             throw new IllegalStateException("No se pudo preparar el esquema de prueba", e);
         }
 
+        dbHost = host;
+        dbPort = port;
+        dbName = name;
+        dbUser = user;
+        dbPass = pass;
+
         provider = new JdbcConnectionProvider(host, port, name, user, pass, 2);
         service = new PatronImageService(provider);
         enabled = true;
+    }
+
+    /**
+     * Regresion del bug de v1.4.0, contra una MariaDB real.
+     *
+     * <p>{@code MariaDbPoolDataSource} delega en el registro estatico
+     * {@code org.mariadb.jdbc.pool.Pools}, indexado por {@code Configuration}: dos providers
+     * con identica configuracion compartian el mismo {@code Pool}. Cuando ConnId invocaba
+     * {@code dispose()} sobre UNA instancia del conector, su {@code close()} destruia el pool
+     * de las demas, que quedaban fallando de forma permanente con
+     * "No connection available within the specified time".</p>
+     *
+     * <p>Necesita BD real: sin ella, un host inalcanzable produce ese mismo mensaje por otra
+     * causa y la prueba no distinguiria nada.</p>
+     */
+    @Test
+    void closingOneProviderDoesNotBreakAnother() {
+        assumeTrue(enabled, "Sin BD disponible");
+        JdbcConnectionProvider a = new JdbcConnectionProvider(dbHost, dbPort, dbName, dbUser, dbPass, 2);
+        JdbcConnectionProvider b = new JdbcConnectionProvider(dbHost, dbPort, dbName, dbUser, dbPass, 2);
+        try {
+            assertNotEquals(a.getPoolName(), b.getPoolName(),
+                    "Cada provider debe tener su propio poolName.");
+            a.testConnection();
+            b.testConnection();
+
+            a.close(); // simula el dispose() de una instancia del conector
+
+            // B debe seguir plenamente operativo.
+            assertDoesNotThrow(b::testConnection,
+                    "El close() de A destruyo el pool compartido de B (regresion v1.4.0).");
+        } finally {
+            b.close();
+        }
     }
 
     @AfterAll

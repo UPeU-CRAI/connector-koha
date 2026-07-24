@@ -127,12 +127,17 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 	@Override
 	public void dispose() {
 		LOG.ok("Liberando recursos del Conector Koha...");
+		// dispose() puede invocarse DOS veces cuando init() falla: init() ya lo llama en su
+		// propio catch y despues ConnId lo vuelve a llamar en su finally. Anular la
+		// referencia evita cerrar el cliente HTTP dos veces (ruido en logs).
 		try {
 			if (httpAdapter != null) {
 				httpAdapter.close();
+				httpAdapter = null;
 			}
 		} catch (IOException e) {
 			LOG.error("Error al cerrar el cliente HTTP: {0}", e.getMessage(), e);
+			httpAdapter = null;
 		}
 		// Cerrar el pool JDBC si fue inicializado.
 		if (jdbcConnectionProvider != null) {

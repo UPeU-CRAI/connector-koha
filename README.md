@@ -66,7 +66,7 @@ La API REST de Koha 25.11 **no tiene endpoint para la imagen del patrón**. Para
 * Atributo `photo` (`byte[]`) con valor `null` → **no se hace nada**. La foto solo se borra ante una operación de borrado explícita de valor; nunca se interpreta `null` como "borrar".
 * La foto solo se lee en búsquedas si MidPoint la pide explícitamente vía `attributesToGet` (atributo `returnedByDefault=false`); nunca se hace un `SELECT` de blob por fila en búsquedas masivas.
 * Mimetypes permitidos: `image/jpeg`, `image/png`. Tamaño máximo del blob: 5 MB.
-* Usa el pool nativo `MariaDbPoolDataSource` del driver MariaDB (no HikariCP, por conflictos con el classloader aislado de ConnId).
+* Usa el pool nativo `MariaDbPoolDataSource` del driver MariaDB (no HikariCP, por conflictos con el classloader aislado de ConnId). **Ojo**: ese `DataSource` no crea un pool propio, sino que lo obtiene del registro estático global `org.mariadb.jdbc.pool.Pools` indexado por configuración. Por eso cada provider fija un `poolName` único: sin él, dos instancias del conector comparten pool y el `dispose()` de una inutiliza a las otras (ver v1.4.1 en el changelog). Tampoco es *lazy*: abre `minPoolSize` conexiones al construirse.
 
 ### Configuración JDBC
 
@@ -156,6 +156,16 @@ TRACE: Máximo nivel de detalle, incluyendo los payloads de las peticiones y res
 Revisa los logs de MidPoint para ver los mensajes emitidos por el conector.
 
 ## 📜 Changelog
+
+### v1.4.1 (2026-07-24)
+- **Fix (crítico)**: aislamiento del pool JDBC. `MariaDbPoolDataSource` no crea un pool propio: delega en el registro **estático global** `org.mariadb.jdbc.pool.Pools`, indexado por la `Configuration` resultante. Dos instancias del conector con idéntica configuración obtenían **el mismo objeto `Pool`**, de modo que el `dispose()` de una destruía el pool de las demás. A partir de ahí toda operación JDBC fallaba de forma permanente con `No connection available within the specified time (option 'connectTimeout': 10,000 ms)`, sin recuperarse ni reiniciando MidPoint. Ahora cada provider genera un `poolName` único, por lo que obtiene un pool propio.
+- **Fix**: se eliminan dos pools huérfanos por cada provider. Cada uno de `setUrl()`, `setUser()` y `setPassword()` dispara la creación de un pool; encadenarlos creaba dos pools previos **sin contraseña** (uno con el usuario del sistema operativo), que fallaban autenticación y nunca se cerraban. Las credenciales van ahora en la URL, de modo que se crea un único pool ya autenticado. El driver enmascara el password como `***` en `Configuration.toString()`, así que no aparece en mensajes de excepción.
+- **Fix**: `minPoolSize=1` explícito. El driver abre `minPoolSize` conexiones de forma *eager* al construir el pool y por defecto `minPoolSize == maxPoolSize`; como ConnId instancia un conector por operación, el default abría `dbPoolSize` conexiones **en cada operación**.
+- **Fix**: `registerJmxPool=false`. Con `poolName` único, cada pool registraría un MBean distinto; un `dispose()` perdido los dejaría registrados indefinidamente.
+- **Fix**: la contraseña se codifica para la URL — con `&`, `=` o `#` se rompía el parseo y degeneraba en un fallo de autenticación difícil de diagnosticar.
+- **Fix**: `dispose()` anula `httpAdapter`; ConnId lo invoca dos veces cuando `init()` falla (una desde el `catch` del propio `init()` y otra desde su `finally`).
+- **Tests**: regresión del aislamiento de pools contra MariaDB real, y cobertura de contraseñas con caracteres reservados de URL.
+- **Nota**: `KohaConnector` **no** implementa `PoolableConnector`, por lo que MidPoint crea una instancia nueva con `init()`+`dispose()` en cada operación de API. Es la razón de que este fallo fuera tan agresivo, y sigue siendo una ineficiencia estructural pendiente de evaluar.
 
 ### v1.3.0 (2026-05-21)
 - **Feature**: Canal JDBC opcional para provisionar la foto del patrón en la tabla `patronimage` de Koha (la API REST de Koha 25.11 no tiene endpoint de imagen). Conector híbrido: REST conserva los ~48 atributos del patrón intactos, JDBC solo para la foto. Un único JAR.
