@@ -24,12 +24,15 @@ public class KohaConfiguration implements Configuration {
     private GuardedString clientSecret;
     private int pageSize = 100;
 
-    // --- Canal JDBC (provisioning de patronimage) ---
+    // --- Canal JDBC (autorizacion del patron) ---
     /**
-     * If true, the connector opens a direct JDBC channel to the Koha database
-     * to provision patron photos into the {@code patronimage} table.
-     * The Koha REST API has no endpoint for patron images, hence this hybrid design.
+     * If true, the connector opens a direct JDBC channel to the Koha database to
+     * provision patron authorization: {@code borrowers.flags} and {@code user_permissions}.
+     * The Koha REST API exposes neither, hence this hybrid design.
      * Default is false (REST-only behaviour, fully backwards compatible).
+     *
+     * <p>NOTE: this channel does NOT handle patron photos. Provisioning binary photos
+     * from MidPoint is deliberately out of scope (removed in v1.5.0).</p>
      */
     private boolean dbEnabled = false;
     private String dbHost;

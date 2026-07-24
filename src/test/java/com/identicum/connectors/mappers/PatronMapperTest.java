@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -219,37 +220,26 @@ public class PatronMapperTest {
         assertNull(co.getAttributeByName("expiry_date"), "expiry_date con formato inválido debe ser null.");
     }
 
+    /**
+     * Guardian de politica (v1.5.0): el conector NO debe manejar fotos binarias del patron.
+     * Provisionar blobs desde MidPoint quedo explicitamente fuera de alcance; si una foto
+     * hace falta en Koha, se lleva como URI/URL en un atributo de texto corriente.
+     *
+     * <p>Este test falla si alguien reintroduce {@code photo} o {@code photo_mimetype}
+     * en el esquema del conector.</p>
+     */
     @Test
-    void testBuildPatronJson_ExcludesPhotoAttributesFromRestPayload() {
-        // photo y photo_mimetype se provisionan via JDBC, nunca via REST.
-        Set<Attribute> attrs = buildSampleAttributesForCreate();
-        attrs.add(AttributeBuilder.build(PatronMapper.ATTR_PHOTO, new byte[]{1, 2, 3, 4}));
-        attrs.add(AttributeBuilder.build(PatronMapper.ATTR_PHOTO_MIMETYPE, "image/jpeg"));
+    void testBinaryPhotoAttributesAreNotPartOfTheSchema() {
+        assertFalse(PatronMapper.ATTRIBUTE_METADATA_MAP.containsKey("photo"),
+                "El conector no debe exponer el atributo binario 'photo'.");
+        assertFalse(PatronMapper.ATTRIBUTE_METADATA_MAP.containsKey("photo_mimetype"),
+                "El conector no debe exponer el atributo 'photo_mimetype'.");
 
-        JSONObject json = patronMapper.buildPatronJson(attrs, true);
-
-        assertFalse(json.has("photo"),
-                "El payload REST NUNCA debe incluir 'photo'.");
-        assertFalse(json.has("photo_mimetype"),
-                "El payload REST NUNCA debe incluir 'photo_mimetype'.");
-        // El resto de atributos del patron si deben estar presentes.
-        assertTrue(json.has("userid"), "El payload REST debe conservar 'userid'.");
-        assertTrue(json.has("cardnumber"), "El payload REST debe conservar 'cardnumber'.");
-    }
-
-    @Test
-    void testPhotoAttributesRegisteredInSchemaMetadata() {
-        AttributeMetadata photoMeta = PatronMapper.ATTRIBUTE_METADATA_MAP.get(PatronMapper.ATTR_PHOTO);
-        AttributeMetadata mimeMeta = PatronMapper.ATTRIBUTE_METADATA_MAP.get(PatronMapper.ATTR_PHOTO_MIMETYPE);
-
-        assertNotNull(photoMeta, "El atributo 'photo' debe estar registrado.");
-        assertNotNull(mimeMeta, "El atributo 'photo_mimetype' debe estar registrado.");
-        assertEquals(byte[].class, photoMeta.getType(), "'photo' debe ser de tipo byte[].");
-        assertEquals(String.class, mimeMeta.getType(), "'photo_mimetype' debe ser de tipo String.");
-        assertTrue(photoMeta.isNotReturnedByDefault(),
-                "'photo' debe tener returnedByDefault=false.");
-        assertTrue(mimeMeta.isNotReturnedByDefault(),
-                "'photo_mimetype' debe tener returnedByDefault=false.");
+        // Ningun atributo del esquema debe ser un blob binario.
+        for (Map.Entry<String, AttributeMetadata> e : PatronMapper.ATTRIBUTE_METADATA_MAP.entrySet()) {
+            assertNotEquals(byte[].class, e.getValue().getType(),
+                    "El atributo '" + e.getKey() + "' es binario; el conector no provisiona blobs.");
+        }
     }
 
     @Test

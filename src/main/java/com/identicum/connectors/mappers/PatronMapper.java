@@ -36,19 +36,6 @@ public class PatronMapper extends BaseMapper {
     public static final Map<String, AttributeMetadata> ATTRIBUTE_METADATA_MAP = new LinkedHashMap<>();
 
     /**
-     * Atributo ConnId con los bytes de la foto del patron.
-     * Se provisiona via canal JDBC a la tabla {@code patronimage} de Koha,
-     * NUNCA via la API REST (Koha 25.11 no tiene endpoint de imagen).
-     */
-    public static final String ATTR_PHOTO = "photo";
-
-    /**
-     * Atributo ConnId con el mimetype de la foto del patron.
-     * Acompana a {@link #ATTR_PHOTO} en el canal JDBC.
-     */
-    public static final String ATTR_PHOTO_MIMETYPE = "photo_mimetype";
-
-    /**
      * Bitmask de permisos administrativos de Koha ({@code borrowers.flags}).
      * Koha REST no expone este campo; se gestiona exclusivamente por el canal
      * JDBC controlado del conector.
@@ -162,15 +149,10 @@ public class PatronMapper extends BaseMapper {
         ATTRIBUTE_METADATA_MAP.put("altaddress_email", new AttributeMetadata("altaddress_email", "altaddress_email", String.class));
         ATTRIBUTE_METADATA_MAP.put("altaddress_phone", new AttributeMetadata("altaddress_phone", "altaddress_phone", String.class));
 
-        // --- Foto del patron (canal JDBC, NO REST) ---
-        // returnedByDefault=false: la foto solo se lee si MidPoint la pide
-        // explicitamente; nunca se hace un SELECT de blob por fila en busquedas masivas.
-        // Estos dos atributos se EXCLUYEN del payload JSON REST en buildPatronJson()
-        // y se procesan en una rama JDBC dedicada del conector.
-        ATTRIBUTE_METADATA_MAP.put(ATTR_PHOTO,
-                new AttributeMetadata(ATTR_PHOTO, "photo", byte[].class, AttributeMetadata.Flags.NOT_RETURNED_BY_DEFAULT));
-        ATTRIBUTE_METADATA_MAP.put(ATTR_PHOTO_MIMETYPE,
-                new AttributeMetadata(ATTR_PHOTO_MIMETYPE, "photo_mimetype", String.class, AttributeMetadata.Flags.NOT_RETURNED_BY_DEFAULT));
+        // --- Autorizacion del patron (canal JDBC, NO REST) ---
+        // Koha no expone borrowers.flags ni user_permissions por su API REST.
+        // Se EXCLUYEN del payload JSON REST en buildPatronJson() y se procesan en una
+        // rama JDBC dedicada del conector.
         ATTRIBUTE_METADATA_MAP.put(ATTR_FLAGS,
                 new AttributeMetadata(ATTR_FLAGS, "flags", Integer.class));
         ATTRIBUTE_METADATA_MAP.put(ATTR_USER_PERMISSIONS,
@@ -182,8 +164,8 @@ public class PatronMapper extends BaseMapper {
      * Conjunto ALLOWLIST de campos nativos de Koha que el conector puede ENVIAR en el
      * cuerpo de un PUT /patrons/{id}. Se deriva de {@link #ATTRIBUTE_METADATA_MAP}:
      * incluye todo campo conocido por el conector que sea actualizable
-     * ({@code !isNotUpdateable()}), EXCLUYE los canales no-REST (photo / photo_mimetype)
-     * y EXCLUYE extended_attributes (van por su endpoint dedicado).
+     * ({@code !isNotUpdateable()}), EXCLUYE los canales no-REST (flags / user_permissions,
+     * que van por JDBC) y EXCLUYE extended_attributes (va por su endpoint dedicado).
      *
      * <p>MOTIVO (v1.3.12) — fix del HTTP 500 determinista en UPDATE: el GET de un patron
      * en Koha 24.05+/25.05/26.05 devuelve campos CALCULADOS que NO pertenecen al schema
@@ -203,8 +185,7 @@ public class PatronMapper extends BaseMapper {
             }
             String nativeName = meta.getKohaNativeName();
             // Canales que NO viajan por REST / van por endpoint dedicado.
-            if ("photo".equals(nativeName) || "photo_mimetype".equals(nativeName)
-                    || ATTR_FLAGS.equals(nativeName) || ATTR_USER_PERMISSIONS.equals(nativeName)
+            if (ATTR_FLAGS.equals(nativeName) || ATTR_USER_PERMISSIONS.equals(nativeName)
                     || "extended_attributes".equals(nativeName)) {
                 continue;
             }
@@ -229,10 +210,9 @@ public class PatronMapper extends BaseMapper {
                 continue;
             }
 
-            // La foto del patron NO viaja por REST: se provisiona via canal JDBC
-            // (tabla patronimage). El conector la procesa en una rama dedicada.
-            if (ATTR_PHOTO.equals(connIdAttrName) || ATTR_PHOTO_MIMETYPE.equals(connIdAttrName)
-                    || ATTR_FLAGS.equals(connIdAttrName) || ATTR_USER_PERMISSIONS.equals(connIdAttrName)) {
+            // La autorizacion (flags / user_permissions) NO viaja por REST: Koha no la
+            // expone. El conector la procesa por el canal JDBC en una rama dedicada.
+            if (ATTR_FLAGS.equals(connIdAttrName) || ATTR_USER_PERMISSIONS.equals(connIdAttrName)) {
                 LOG.ok("Excluyendo del payload REST el atributo JDBC '{0}'.", connIdAttrName);
                 continue;
             }
@@ -328,10 +308,9 @@ public class PatronMapper extends BaseMapper {
                 continue;
             }
 
-            // La foto del patron no proviene del JSON REST; la lee el conector
-            // via canal JDBC solo cuando MidPoint la solicita explicitamente.
-            if (ATTR_PHOTO.equals(meta.getConnIdName()) || ATTR_PHOTO_MIMETYPE.equals(meta.getConnIdName())
-                    || ATTR_FLAGS.equals(meta.getConnIdName())
+            // La autorizacion no proviene del JSON REST; la lee el conector via canal
+            // JDBC solo cuando MidPoint la solicita explicitamente.
+            if (ATTR_FLAGS.equals(meta.getConnIdName())
                     || ATTR_USER_PERMISSIONS.equals(meta.getConnIdName())) {
                 continue;
             }

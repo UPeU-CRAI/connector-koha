@@ -47,7 +47,7 @@ class JdbcConnectionProviderTest {
     }
 
     // El escenario "cerrar A no debe romper B" requiere una BD real y vive en
-    // PatronImageServiceContainerTest#closingOneProviderDoesNotBreakAnother: contra un host
+    // JdbcConnectionProviderContainerTest#closingOneProviderDoesNotBreakAnother: contra un host
     // inalcanzable, el driver devuelve el mismo "No connection available" por otra causa,
     // asi que aqui no probaria nada.
 

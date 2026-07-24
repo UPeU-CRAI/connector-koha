@@ -27,7 +27,7 @@ public class AttributeMetadata {
          * El atributo no se devuelve por defecto en las busquedas:
          * solo se incluye si MidPoint lo pide explicitamente via
          * {@code OperationOptions.getAttributesToGet()}.
-         * Util para atributos costosos como blobs (p. ej. la foto del patron).
+         * Util para atributos costosos que exigen una consulta adicional.
          */
         NOT_RETURNED_BY_DEFAULT
     }
