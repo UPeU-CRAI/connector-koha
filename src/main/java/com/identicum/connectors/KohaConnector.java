@@ -23,6 +23,7 @@ import org.identityconnectors.framework.common.objects.filter.FilterTranslator;
 import org.identityconnectors.framework.spi.Configuration;
 import org.identityconnectors.framework.spi.Connector;
 import org.identityconnectors.framework.spi.ConnectorClass;
+import org.identityconnectors.framework.spi.PoolableConnector;
 import org.identityconnectors.framework.spi.operations.*;
 
 import org.json.JSONArray;
@@ -35,7 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 @ConnectorClass(displayNameKey = "connector.identicum.rest.display", configurationClass = KohaConfiguration.class)
-public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, SearchOp<KohaFilter>, DeleteOp, TestOp {
+public class KohaConnector implements PoolableConnector, CreateOp, UpdateOp, SchemaOp, SearchOp<KohaFilter>, DeleteOp, TestOp {
 
 	private static final Log LOG = Log.getLog(KohaConnector.class);
 
@@ -141,6 +142,44 @@ public class KohaConnector implements Connector, CreateOp, UpdateOp, SchemaOp, S
 			jdbcConnectionProvider.close();
 			jdbcConnectionProvider = null;
 			patronPermissionService = null;
+		}
+	}
+
+	/**
+	 * Implementa {@link PoolableConnector}: permite que ConnId reutilice esta instancia
+	 * entre operaciones en lugar de invocar {@code init()}/{@code dispose()} en cada una.
+	 *
+	 * <p>Sin esto, MidPoint creaba y destruia un {@code KohaConnector} completo -incluyendo
+	 * su pool JDBC propio- por CADA operacion de la API (cada create, update, get, search).
+	 * En una reconciliacion de ~27.500 cuentas eso significaba decenas de miles de pools JDBC
+	 * abriendose y cerrandose. Con {@code PoolableConnector}, ConnId mantiene hasta
+	 * {@code connectorPoolConfiguration/maxObjects} instancias vivas y solo llama
+	 * {@code checkAlive()} al pedir una del pool interno.</p>
+	 *
+	 * <p><strong>Debe ser barato</strong>: el framework lo invoca en cada
+	 * {@code borrowObject()}, potencialmente una vez por operacion. Por eso NO hace ninguna
+	 * llamada HTTP a Koha (eso si seria un round-trip de red por operacion). Se limita a:</p>
+	 * <ul>
+	 *   <li>Verificar que el cliente HTTP siga instanciado (validacion local, sin red).</li>
+	 *   <li>Si el canal JDBC esta activo, validar el pool. El propio driver MariaDB limita
+	 *       esa validacion a como maximo una vez por segundo por conexion
+	 *       ({@code poolValidMinDelay}, default 1000ms), asi que llamadas frecuentes no
+	 *       golpean la base de datos repetidamente.</li>
+	 * </ul>
+	 *
+	 * <p>Si algo aqui lanza, ConnId descarta esta instancia (llama a {@code dispose()}) y
+	 * crea una nueva en su lugar -comportamiento de autorecuperacion deseado.</p>
+	 */
+	@Override
+	public void checkAlive() {
+		if (httpAdapter == null) {
+			throw new ConnectorException("KohaConnector.checkAlive(): httpAdapter no inicializado.");
+		}
+		if (jdbcConnectionProvider != null) {
+			// Reutiliza testConnection(): toma una conexion del pool, valida con isValid(),
+			// la devuelve. Con poolValidMinDelay del driver, no reconsulta la BD si ya se
+			// valido hace menos de un segundo.
+			jdbcConnectionProvider.testConnection();
 		}
 	}
 

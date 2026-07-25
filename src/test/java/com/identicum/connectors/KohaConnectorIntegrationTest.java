@@ -1,8 +1,11 @@
 package com.identicum.connectors;
 
 import com.identicum.connectors.services.CategoryService;
+import com.identicum.connectors.services.HttpClientAdapter;
+import com.identicum.connectors.services.JdbcConnectionProvider;
 import com.identicum.connectors.services.PatronService;
 import com.identicum.connectors.services.PatronPermissionService;
+import org.identityconnectors.framework.common.exceptions.ConnectionFailedException;
 import org.identityconnectors.framework.common.exceptions.ConnectorException;
 import org.identityconnectors.framework.common.exceptions.ConnectorIOException;
 import org.identityconnectors.framework.common.objects.Attribute;
@@ -41,6 +44,12 @@ public class KohaConnectorIntegrationTest {
     private CategoryService categoryService;
     @Mock
     private PatronPermissionService patronPermissionService;
+
+    @Mock
+    private HttpClientAdapter httpAdapter;
+
+    @Mock
+    private JdbcConnectionProvider jdbcConnectionProvider;
 
     @Mock
     private KohaConfiguration configuration;
@@ -271,5 +280,54 @@ public class KohaConnectorIntegrationTest {
     void delete_group_throwsConnectorException() {
         assertThrows(UnsupportedOperationException.class,
             () -> connector.delete(ObjectClass.GROUP, new Uid("ESTUDI"), new OperationOptionsBuilder().build()));
+    }
+
+    // --- PoolableConnector.checkAlive() ---
+    //
+    // ConnId invoca checkAlive() en cada borrowObject() del pool de conectores, asi que
+    // debe ser barata: nunca debe llamar a la API REST de Koha (ver el javadoc del metodo).
+    // Estas pruebas verifican eso explicitamente con verifyNoInteractions(patronService).
+
+    @Test
+    void checkAlive_succeedsWithHttpAdapterOnly_dbDisabled() throws Exception {
+        // dbEnabled=false: jdbcConnectionProvider queda null (comportamiento real de init()).
+        setField("jdbcConnectionProvider", null);
+
+        assertDoesNotThrow(() -> connector.checkAlive());
+        verifyNoInteractions(patronService, categoryService);
+    }
+
+    @Test
+    void checkAlive_validatesJdbcPool_whenDbEnabled() throws Exception {
+        // jdbcConnectionProvider queda inyectado (mock) por @InjectMocks: simula dbEnabled=true.
+        doNothing().when(jdbcConnectionProvider).testConnection();
+
+        assertDoesNotThrow(() -> connector.checkAlive());
+        verify(jdbcConnectionProvider, times(1)).testConnection();
+        verifyNoInteractions(patronService, categoryService);
+    }
+
+    @Test
+    void checkAlive_throws_whenHttpAdapterMissing() throws Exception {
+        // httpAdapter nulo simula una instancia a medio inicializar o ya dispuesta: ConnId
+        // debe descartarla, no reutilizarla silenciosamente.
+        setField("httpAdapter", null);
+
+        assertThrows(ConnectorException.class, () -> connector.checkAlive());
+    }
+
+    @Test
+    void checkAlive_propagatesJdbcFailure() throws Exception {
+        // Un pool JDBC roto (la regresion v1.4.0) debe hacer que checkAlive() falle, para que
+        // ConnId descarte esta instancia y cree una nueva con un pool sano.
+        doThrow(new ConnectionFailedException("pool muerto")).when(jdbcConnectionProvider).testConnection();
+
+        assertThrows(ConnectionFailedException.class, () -> connector.checkAlive());
+    }
+
+    private void setField(String fieldName, Object value) throws Exception {
+        java.lang.reflect.Field field = KohaConnector.class.getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.set(connector, value);
     }
 }

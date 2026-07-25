@@ -2,7 +2,7 @@
 
 Conector de identidades para **Evolveum MidPoint** que gestiona el ciclo de vida de usuarios (Patrones) y grupos (Categorías de Patrones) en el **Sistema Integrado de Gestión de Bibliotecas (ILS) Koha**. Es un conector **híbrido**: usa la API REST de Koha para los atributos del patrón y un **canal JDBC opcional** para la autorización del patrón (`borrowers.flags` y `user_permissions`, que la API REST de Koha no expone). Está desarrollado siguiendo las mejores prácticas del Identity Connector Framework (ConnId).
 
-**Versión 1.5.0** — Requiere **Koha 25.11+** (usa PATCH para actualizaciones de patrones).
+**Versión 1.6.0** — Requiere **Koha 25.11+** (usa PATCH para actualizaciones de patrones).
 
 ## ✨ Características Principales
 * **Gestión completa de Patrones y Categorías**: Operaciones de `Create`, `Search`, `Update` y `Delete` para cuentas y grupos.
@@ -23,10 +23,10 @@ Conector de identidades para **Evolveum MidPoint** que gestiona el ciclo de vida
 * **Koha 25.11+** y, si se usa el canal JDBC de autorización, acceso de red a la base de datos MariaDB de Koha.
 
 ## 🚀 Instalación
-1.  **Descargar el conector**: Visita la sección [Releases](https://github.com/UPeU-Infra/connector-koha/releases) y descarga el archivo `.jar` más reciente (p. ej., `connector-koha-1.5.0.jar`).
+1.  **Descargar el conector**: Visita la sección [Releases](https://github.com/UPeU-Infra/connector-koha/releases) y descarga el archivo `.jar` más reciente (p. ej., `connector-koha-1.6.0.jar`).
 2.  **Desplegar en MidPoint**: Copia el `.jar` en el directorio de conectores de tu instancia de MidPoint.
     ```bash
-    cp connector-koha-1.5.0.jar $MIDPOINT_HOME/var/icf-connectors/
+    cp connector-koha-1.6.0.jar $MIDPOINT_HOME/var/icf-connectors/
     ```
 3.  **Reiniciar MidPoint** para que detecte y cargue el nuevo conector.
 
@@ -69,6 +69,7 @@ La API REST de Koha **no expone** `borrowers.flags` ni `user_permissions` (los p
 * `flags` y `user_permissions` solo se leen si MidPoint los pide explícitamente vía `attributesToGet` (`returnedByDefault=false`).
 * `replaceAuthorization()` escribe el bitmask y el conjunto completo de permisos en **una sola transacción**, con `SELECT ... FOR UPDATE` sobre el patrón.
 * Usa el pool nativo `MariaDbPoolDataSource` del driver MariaDB (no HikariCP, por conflictos con el classloader aislado de ConnId). **Ojo**: ese `DataSource` no crea un pool propio, sino que lo obtiene del registro estático global `org.mariadb.jdbc.pool.Pools` indexado por configuración. Por eso cada provider fija un `poolName` único: sin él, dos instancias del conector comparten pool y el `dispose()` de una inutiliza a las otras (ver v1.4.1 en el changelog). Tampoco es *lazy*: abre `minPoolSize` conexiones al construirse.
+* **Desde v1.6.0, `KohaConnector` implementa `PoolableConnector`** (`checkAlive()`). Antes, sin esa interfaz, MidPoint creaba y destruía una instancia completa del conector —con su pool JDBC propio— en **cada** operación de la API; en una reconciliación de ~27.500 cuentas eso eran decenas de miles de pools abriéndose y cerrándose. Ahora ConnId mantiene instancias vivas entre operaciones según `connectorPoolConfiguration` del recurso (por defecto hasta 10, ver más abajo) y solo llama `checkAlive()` al pedir una prestada. `checkAlive()` nunca hace una llamada HTTP a Koha (sería un round-trip de red por operación); valida el pool JDBC reutilizando `testConnection()`, que el propio driver limita a una revalidación por segundo por conexión (`poolValidMinDelay`).
 
 ### Configuración JDBC
 
@@ -101,6 +102,25 @@ La API REST de Koha **no expone** `borrowers.flags` ni `user_permissions` (los p
 | `dbUser` | String | — | Usuario MariaDB con permisos sobre `borrowers` y `user_permissions` |
 | `dbPassword` | GuardedString | — | Contraseña del usuario MariaDB |
 | `dbPoolSize` | int | `2` | Tamaño máximo del pool JDBC **por instancia del conector** |
+
+### `connectorPoolConfiguration` (recomendado desde v1.6.0)
+
+Con `PoolableConnector` implementado, el pool de conectores de MidPoint (`icfc:connectorPoolConfiguration` en el recurso) pasa a tener efecto real — antes de v1.6.0, MidPoint lo aceptaba pero ConnId lo ignoraba silenciosamente por no ser un conector pooleable. Para una reconciliación con `workerThreads=4`:
+
+```xml
+<connectorConfiguration>
+    <icfc:connectorPoolConfiguration>
+        <icfc:minIdle>1</icfc:minIdle>
+        <icfc:maxIdle>6</icfc:maxIdle>
+        <icfc:maxObjects>8</icfc:maxObjects>
+        <icfc:maxWait>30000</icfc:maxWait>
+        <icfc:minEvictableIdleTime>300000</icfc:minEvictableIdleTime>
+    </icfc:connectorPoolConfiguration>
+    <!-- ... configurationProperties ... -->
+</connectorConfiguration>
+```
+
+`maxObjects=8` acota el techo real de conexiones JDBC a `8 × dbPoolSize`; contrástalo contra el `max_connections` de la MariaDB de Koha antes de subirlo. Con instancias ahora de vida más larga (reutilizadas en vez de creadas por operación), tiene sentido bajar `dbPoolSize` a `1` — cada instancia ya no compite por conexiones dentro de sí misma, dado que ConnId ejecuta cada instancia en un solo hilo.
 
 ## 🏛️ Arquitectura del Conector
 
@@ -156,6 +176,12 @@ TRACE: Máximo nivel de detalle, incluyendo los payloads de las peticiones y res
 Revisa los logs de MidPoint para ver los mensajes emitidos por el conector.
 
 ## 📜 Changelog
+
+### v1.6.0 (2026-07-25)
+- **Feature**: `KohaConnector` implementa `PoolableConnector` (`checkAlive()`). Sin esa interfaz, MidPoint creaba y destruía una instancia completa del conector —con su propio pool JDBC— en cada operación de la API; en una reconciliación de ~27.500 cuentas eso eran decenas de miles de pools abriéndose y cerrándose por ciclo. Ahora ConnId reutiliza instancias entre operaciones según `connectorPoolConfiguration` del recurso.
+- **Diseño**: `checkAlive()` es deliberadamente barato — nunca llama a la API REST de Koha (sería un round-trip de red por operación). Valida solo que `httpAdapter` siga instanciado y, si `dbEnabled=true`, revalida el pool JDBC vía `testConnection()` (el propio driver limita esa revalidación a una vez por segundo por conexión).
+- **Docs**: se documenta `connectorPoolConfiguration` recomendado para el recurso, que antes de esta versión MidPoint aceptaba pero ConnId ignoraba silenciosamente al no ser este un conector pooleable.
+- **Tests**: 4 pruebas nuevas cubren `checkAlive()` — éxito con y sin JDBC habilitado, fallo cuando `httpAdapter` falta, y propagación de fallos del pool JDBC (para que ConnId descarte la instancia y cree una sana).
 
 ### v1.5.0 (2026-07-24)
 - **Breaking**: se retira por completo el soporte de **fotos del patrón**. Desaparecen los atributos `photo` y `photo_mimetype`, la clase `PatronImageService` y todas las ramas de lectura/escritura sobre la tabla `patronimage`. Provisionar imágenes binarias desde MidPoint queda fuera de alcance por decisión de arquitectura: el aprovisionamiento de identidades mueve atributos de identidad, no archivos. Una foto puede seguir llegando a Koha como **URI/URL** en un atributo de texto corriente.
