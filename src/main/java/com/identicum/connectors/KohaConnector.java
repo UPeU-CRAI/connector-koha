@@ -36,7 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 @ConnectorClass(displayNameKey = "connector.identicum.rest.display", configurationClass = KohaConfiguration.class)
-public class KohaConnector implements PoolableConnector, CreateOp, UpdateOp, SchemaOp, SearchOp<KohaFilter>, DeleteOp, TestOp {
+public class KohaConnector implements PoolableConnector, CreateOp, UpdateOp, UpdateDeltaOp, SchemaOp, SearchOp<KohaFilter>, DeleteOp, TestOp {
 
 	private static final Log LOG = Log.getLog(KohaConnector.class);
 
@@ -259,6 +259,99 @@ public class KohaConnector implements PoolableConnector, CreateOp, UpdateOp, Sch
 			LOG.error(e, "Error inesperado en Create para ObjectClass {0}", oClass.getObjectClassValue());
 			throw ConnectorException.wrap(e);
 		}
+	}
+
+	/**
+	 * Aplica un update expresado como DELTAS (ConnId {@link AttributeDelta}).
+	 *
+	 * <p>MOTIVO (2026-08-15). Hasta ahora el conector solo implementaba {@link UpdateOp},
+	 * que no sabe de altas y bajas: recibe el valor final de cada atributo. Cuando MidPoint
+	 * calcula un cambio de valor sobre un atributo MULTIVALOR —para
+	 * {@code extended_attributes} produce dos itemDelta, {@code ADD {"type":"STUDY_LEVEL",
+	 * "value":"pregrado"}} y {@code DELETE {"type":"STUDY_LEVEL","value":"posgrado"}}—,
+	 * el framework se los entrega a un UpdateOp <b>fusionados en un unico atributo</b>.
+	 * El conector veia entonces DOS entradas de STUDY_LEVEL y las enviaba las dos a Koha,
+	 * que responde
+	 * {@code 409 "Tried to add more than one non-repeatable attributes"} y aborta la
+	 * operacion completa del patron.</p>
+	 *
+	 * <p>Medido en PROD el 15-ago-2026 con el log del conector en TRACE:
+	 * {@code PUT extended_attributes patron 4067: 7 entradas} cuando el patron solo tiene
+	 * 6 atributos (1 STUDY_LEVEL + 1 COD_UPEU + 1 DNI + 3 STUDYCYCLE). El delta de MidPoint
+	 * era correcto; lo que faltaba era una interfaz capaz de expresarlo.</p>
+	 *
+	 * <p>Al implementar {@link UpdateDeltaOp}, ConnId entrega las altas y las bajas por
+	 * separado y aqui se resuelven contra el estado real del patron antes de escribir:
+	 * {@code final = actuales - valuesToRemove + valuesToAdd}. El resto de atributos se
+	 * traduce a su valor final y se delega en {@link #update} sin cambios.</p>
+	 */
+	@Override
+	public Set<AttributeDelta> updateDelta(ObjectClass oClass, Uid uid, Set<AttributeDelta> deltas, OperationOptions options) {
+		LOG.ok("Iniciando UpdateDelta para ObjectClass {0}, Uid: {1}, Deltas: {2}", oClass, uid.getUidValue(),
+				deltas != null ? deltas.stream().map(AttributeDelta::getName).collect(Collectors.toSet()) : "null");
+		if (deltas == null || deltas.isEmpty()) {
+			return java.util.Collections.emptySet();
+		}
+		Set<Attribute> attrs = new java.util.HashSet<>();
+		for (AttributeDelta d : deltas) {
+			String name = d.getName();
+			if (d.getValuesToReplace() != null) {
+				// Atributo single-value o reemplazo explicito: se pasa tal cual.
+				attrs.add(AttributeBuilder.build(name, d.getValuesToReplace()));
+			} else {
+				// Multivalor por altas/bajas: se resuelve contra el estado ACTUAL del recurso,
+				// que es la unica forma de no perder los valores que MidPoint no menciona.
+				attrs.add(AttributeBuilder.build(name, resolveMultivalued(oClass, uid, name, d)));
+			}
+		}
+		update(oClass, uid, attrs, options);
+		return java.util.Collections.emptySet();
+	}
+
+	/**
+	 * Calcula el valor final de un atributo multivaluado: actuales - bajas + altas.
+	 * Lee los actuales del propio recurso (no del shadow de MidPoint) para que el
+	 * resultado refleje lo que Koha tiene de verdad.
+	 */
+	private java.util.List<Object> resolveMultivalued(ObjectClass oClass, Uid uid, String name, AttributeDelta delta) {
+		java.util.List<Object> valores = new java.util.ArrayList<>();
+		if ("extended_attributes".equals(name)) {
+			try {
+				JSONObject patron = patronService.getPatron(uid.getUidValue());
+				Object raw = patron != null ? patron.opt("extended_attributes") : null;
+				if (raw instanceof JSONArray) {
+					JSONArray arr = (JSONArray) raw;
+					for (int i = 0; i < arr.length(); i++) {
+						JSONObject e = arr.optJSONObject(i);
+						if (e == null) continue;
+						String t = e.optString("type", null);
+						if (t == null || t.isEmpty()) continue;
+						// Misma forma canonica {"type":X,"value":Y} que usa MidPoint en sus deltas,
+						// para que removeAll() case por igualdad de String.
+						JSONObject norm = new JSONObject();
+						norm.put("type", t);
+						norm.put("value", e.optString("value", ""));
+						valores.add(norm.toString());
+					}
+				}
+			} catch (Exception e) {
+				// Sin lectura previa se aplican solo las altas: es preferible a abortar el update
+				// entero, y el merge-preserve de PatronService conserva los tipos no gobernados.
+				LOG.warn(e, "UpdateDelta {0}: no se pudo leer el valor actual de {1}; se aplican solo las altas",
+						uid.getUidValue(), name);
+			}
+		}
+		if (delta.getValuesToRemove() != null) {
+			valores.removeAll(delta.getValuesToRemove());
+		}
+		if (delta.getValuesToAdd() != null) {
+			for (Object v : delta.getValuesToAdd()) {
+				if (!valores.contains(v)) {
+					valores.add(v);
+				}
+			}
+		}
+		return valores;
 	}
 
 	@Override
